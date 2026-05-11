@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: active
-last_updated: "2026-05-11T06:55:00.000Z"
+last_updated: "2026-05-11T12:00:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 0
   total_plans: 3
-  completed_plans: 1
-  percent: 33
+  completed_plans: 2
+  percent: 67
 ---
 
 # Project State
@@ -47,6 +47,7 @@ Started: 2026-05-10
 - 2026-05-10: Roadmap created (5 phases, 34/34 v1 requirements mapped)
 - 2026-05-10: Roadmap revised to 8 atomic phases (34/34 v1 requirements mapped); split prior Phase 2 into Search Input + First Scraper/Map, prior Phase 4 into Cache/Dedup + Auth, prior Phase 5 into Dashboard + Observability
 - 2026-05-11: Completed Plan 01-01 — repo scaffold, backend uv project, Supabase migration 0001 applied to live dev project (ref ebxglaywpuynshplrtys), Next.js 15 + supabase-js client, pytest 7-stub scaffold green; smoke test prints `schema-push-verified`. Requirements COST-01/02/03 + CACH-03/04 scaffolded (behavior lands in 01-02).
+- 2026-05-11: Completed Plan 01-02 — BudgetGuard (COST-01/02/03), FastAPI /api/jobs POST+GET (CACH-03), ARQ stub_scraper (3 iters × 3 listings, CACH-04). Full backend test suite green: `7 passed`. Six per-task commits (3 RED + 3 GREEN TDD pairs).
 
 ## Decisions Accumulated
 
@@ -56,3 +57,7 @@ Started: 2026-05-10
 - Next.js pinned to `^15` (NOT 16); `@supabase/supabase-js ^2.105`.
 - pgcrypto enabled for `gen_random_uuid()` (Pitfall 8).
 - RLS deferred to Phase 6 with explicit TODO marker in migration 0001.
+- HAIKU_INPUT_USD_PER_TOKEN = 1e-6 (Haiku 4.5 input $1/M) — resolves Plan 02 cost-per-call open question; verified by test_daily_spend_upsert.
+- CORS lock for backend dev: exact `["http://localhost:3000"]` allow-list, methods `GET/POST/OPTIONS`, headers `Content-Type` (Pitfall 6).
+- ARQ WorkerSettings.max_tries=1 (T-02-07 — avoid duplicate fake-data inserts on retry).
+- GET /api/jobs/{id} uses `pydantic.UUID4` so malformed paths return 422, not 500 (ASVS V5).

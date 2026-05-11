@@ -31,7 +31,7 @@
 5. The orchestration scaffold refuses to exceed configured per-search caps (8–12 iters, token budget, 8KB per tool result) and writes a daily spend row for every simulated LLM call.
 **Plans:** 3 plans
 - [x] 01-01-PLAN.md — Repo scaffolding: docker-compose, .env.example, backend uv project, Supabase migration 0001_init.sql, frontend Next.js 15 + Tailwind + supabase-js, pytest scaffold. Includes [BLOCKING] schema-push checkpoint. (Completed 2026-05-11)
-- [ ] 01-02-PLAN.md — Backend behavior: BudgetGuard (COST-01/02/03), FastAPI POST/GET /api/jobs (CACH-03), ARQ worker + stub_scraper (CACH-04), and complete test suite (7 tests).
+- [x] 01-02-PLAN.md — Backend behavior: BudgetGuard (COST-01/02/03), FastAPI POST/GET /api/jobs (CACH-03), ARQ worker + stub_scraper (CACH-04), and complete test suite (7 tests). (Completed 2026-05-11)
 - [ ] 01-03-PLAN.md — Frontend slice: Next.js page implementing UI-SPEC with Supabase Realtime streaming, localStorage reattach, and end-to-end manual smoke checkpoint covering all 5 ROADMAP success criteria.
 
 ### Phase 2: Search Input & NL Parsing
@@ -117,7 +117,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Skeleton | 1/3 | Active | - |
+| 1. Foundation Skeleton | 2/3 | Active | - |
 | 2. Search Input & NL Parsing | 0/0 | Not started | - |
 | 3. First Scraper + Map Results | 0/0 | Not started | - |
 | 4. LLM Extraction & Multi-Source | 0/0 | Not started | - |
