@@ -3,7 +3,8 @@
 import { useEffect, useRef, useState } from 'react';
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
-import type { Listing, JobStatus, SearchJob, JobResponse } from './types';
+import type { Listing, JobStatus, SearchJob, JobResponse, JobPostPayload } from './types';
+import { SearchForm } from './components/SearchForm';
 
 const LOCALSTORAGE_KEY = 'property_helper_job_id';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
@@ -87,7 +88,7 @@ export default function Home() {
       }
       if (!res.ok) {
         setError(
-          "Couldn't start the job. Check that the backend (uvicorn) and Redis are running, then try again.",
+          "Couldn't start the search. Check that the backend and Redis are running, then try again.",
         );
         setStatus('idle');
         return;
@@ -101,7 +102,7 @@ export default function Home() {
       subscribe(id);
     } catch {
       setError(
-        "Couldn't start the job. Check that the backend (uvicorn) and Redis are running, then try again.",
+        "Couldn't start the search. Check that the backend and Redis are running, then try again.",
       );
       setStatus('idle');
     }
@@ -123,7 +124,7 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
-  async function startSearch() {
+  async function startSearch(payload: JobPostPayload) {
     setError(null);
     setListings([]);
     setResumed(false);
@@ -132,11 +133,15 @@ export default function Home() {
       const res = await fetch(`${API_URL}/api/jobs`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query: 'Phase 1 stub query' }),
+        body: JSON.stringify({
+          query: payload.query,
+          chips: payload.chips,
+          global_flex: payload.global_flex,
+        }),
       });
       if (!res.ok) {
         setError(
-          "Couldn't start the job. Check that the backend (uvicorn) and Redis are running, then try again.",
+          "Couldn't start the search. Check that the backend and Redis are running, then try again.",
         );
         setStatus('idle');
         setJobId(null);
@@ -159,7 +164,7 @@ export default function Home() {
       } catch { /* non-fatal — Realtime will fill in any gaps */ }
     } catch {
       setError(
-        "Couldn't start the job. Check that the backend (uvicorn) and Redis are running, then try again.",
+        "Couldn't start the search. Check that the backend and Redis are running, then try again.",
       );
       setStatus('idle');
       setJobId(null);
@@ -167,22 +172,15 @@ export default function Home() {
   }
 
   const inFlight = status === 'pending' || status === 'running' || status === 'resuming';
-  const completed = status === 'completed';
-
-  const buttonLabel = inFlight
-    ? 'Searching…'
-    : completed
-    ? 'Start another search'
-    : 'Start search';
 
   function statusBadgeText(): string {
-    if (status === 'pending' || status === 'resuming') return 'Status: queued';
-    if (status === 'running')
-      return 'Status: running — listings will appear below';
-    if (status === 'completed')
-      return `Status: completed — ${listings.length} listings received`;
-    if (status === 'failed')
-      return 'Status: failed — worker error. Try again.';
+    if (status === 'pending' || status === 'resuming') return 'Queued — searching soon…';
+    if (status === 'running') return 'Searching — listings will appear below';
+    if (status === 'completed') {
+      const n = listings.length;
+      return `Done — ${n} listing${n === 1 ? '' : 's'} found`;
+    }
+    if (status === 'failed') return 'Search failed — try again';
     return '';
   }
 
@@ -205,36 +203,31 @@ export default function Home() {
     <main className="min-h-screen bg-white">
       <div className="mx-auto max-w-[720px] px-6 pt-8 pb-12">
         <h1 className="text-[20px] font-semibold leading-tight">
-          Property Helper — Foundation Skeleton
+          Property Helper
         </h1>
         <p className="text-sm text-zinc-500 mt-2">
-          Phase 1 proof: clicking Start search streams fake listings from the worker.
+          Describe what you&apos;re looking for. Results stream in automatically.
         </p>
 
         {resumed && jobId && (
           <div className="mt-6 rounded bg-zinc-100 p-2 text-sm">
-            Resumed previous search ({jobId}). Status: {status}.
+            Resumed previous search. Status: {status}.
           </div>
         )}
 
         {error && (
-          <div className="mt-6 rounded border border-red-600 bg-red-50 p-2 text-sm text-red-700">
+          <div className="mt-6 rounded border border-red-600 bg-red-50 p-2 text-sm text-red-700" role="alert">
             {error}
           </div>
         )}
 
-        <button
-          type="button"
-          onClick={startSearch}
-          disabled={inFlight}
-          className="mt-6 inline-flex min-h-[32px] items-center justify-center rounded bg-zinc-900 px-4 py-2 text-sm font-semibold text-white disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {buttonLabel}
-        </button>
+        <div className="mt-6">
+          <SearchForm onSubmit={startSearch} inFlight={inFlight} />
+        </div>
 
         {jobId && (
           <div
-            className="mt-4 inline-block rounded bg-zinc-100 px-3 py-1 text-sm font-semibold ml-3"
+            className="mt-4 inline-block rounded bg-zinc-100 px-3 py-1 text-sm font-semibold"
             aria-live="polite"
           >
             {statusBadgeText()}
@@ -243,7 +236,7 @@ export default function Home() {
 
         {showCompletedEmpty && (
           <div className="mt-6 rounded bg-zinc-100 p-2 text-sm">
-            Job finished but returned no listings. This is unexpected — check the worker logs.
+            Search finished with no listings. Check worker logs or try a different query.
           </div>
         )}
 
@@ -289,9 +282,9 @@ export default function Home() {
 
         {showEmpty && (
           <div className="mt-8 rounded bg-zinc-100 px-6 py-6 text-center">
-            <div className="font-semibold">No search running</div>
+            <div className="font-semibold">Describe your ideal apartment</div>
             <div className="mt-1 text-sm">
-              {'Click "Start search" to enqueue a stub job. Fake listings will stream in below.'}
+              Type what you&apos;re looking for above — beds, location, price, amenities. No follow-up questions.
             </div>
           </div>
         )}
