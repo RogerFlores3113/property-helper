@@ -4,10 +4,10 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 01
 status: active
-last_updated: "2026-05-11T18:00:00.000Z"
+last_updated: "2026-05-11T20:00:00.000Z"
 progress:
   total_phases: 8
-  completed_phases: 0
+  completed_phases: 1
   total_plans: 3
   completed_plans: 3
   percent: 100
@@ -26,7 +26,7 @@ See: .planning/PROJECT.md
 
 | Phase | Name | Status |
 |-------|------|--------|
-| 1 | Foundation Skeleton | 🔄 Active |
+| 1 | Foundation Skeleton | ✅ Complete |
 | 2 | Search Input & NL Parsing | ⏳ Pending |
 | 3 | First Scraper + Map Results | ⏳ Pending |
 | 4 | LLM Extraction & Multi-Source | ⏳ Pending |
@@ -49,6 +49,7 @@ Started: 2026-05-10
 - 2026-05-11: Completed Plan 01-01 — repo scaffold, backend uv project, Supabase migration 0001 applied to live dev project (ref ebxglaywpuynshplrtys), Next.js 15 + supabase-js client, pytest 7-stub scaffold green; smoke test prints `schema-push-verified`. Requirements COST-01/02/03 + CACH-03/04 scaffolded (behavior lands in 01-02).
 - 2026-05-11: Completed Plan 01-02 — BudgetGuard (COST-01/02/03), FastAPI /api/jobs POST+GET (CACH-03), ARQ stub_scraper (3 iters × 3 listings, CACH-04). Full backend test suite green: `7 passed`. Six per-task commits (3 RED + 3 GREEN TDD pairs).
 - 2026-05-11: Completed Plan 01-03 (code) — frontend/app/page.tsx implements UI-SPEC verbatim with Supabase Realtime dual-channel subscription (listings INSERT + search_jobs UPDATE), localStorage fire-and-forget reattach via GET /api/jobs/{id}, mergeById dedup (Pitfall 1), and useEffect cleanup via removeChannel (Pitfall 7). `npm run build` clean. Task 2 manual end-to-end smoke (all 5 ROADMAP success criteria) is a checkpoint:human-verify awaiting execution.
+- 2026-05-11: Plan 01-03 fully complete — Task 2 manual smoke PASSED with resume signal `phase-1-complete`. All 5 ROADMAP success criteria verified: SC#1 enqueue+running, SC#2 streaming <1s (after pull-on-connect fix), SC#3 fire-and-forget reload (after jsonb parsing fix), SC#4 listings ~315 chars, SC#5 pytest 7 passed + daily_spend row with estimated_tokens=4500. Two post-execution bug fixes committed in 28c5d20 (jobs.py jsonb parsing + page.tsx pull-on-connect race). **Phase 1 complete.**
 
 ## Decisions Accumulated
 

@@ -32,7 +32,7 @@
 **Plans:** 3 plans
 - [x] 01-01-PLAN.md — Repo scaffolding: docker-compose, .env.example, backend uv project, Supabase migration 0001_init.sql, frontend Next.js 15 + Tailwind + supabase-js, pytest scaffold. Includes [BLOCKING] schema-push checkpoint. (Completed 2026-05-11)
 - [x] 01-02-PLAN.md — Backend behavior: BudgetGuard (COST-01/02/03), FastAPI POST/GET /api/jobs (CACH-03), ARQ worker + stub_scraper (CACH-04), and complete test suite (7 tests). (Completed 2026-05-11)
-- [x] 01-03-PLAN.md — Frontend slice: Next.js page implementing UI-SPEC with Supabase Realtime streaming, localStorage reattach, and end-to-end manual smoke checkpoint covering all 5 ROADMAP success criteria. (Code completed 2026-05-11; Task 2 manual smoke awaiting human verification)
+- [x] 01-03-PLAN.md — Frontend slice: Next.js page implementing UI-SPEC with Supabase Realtime streaming, localStorage reattach, and end-to-end manual smoke checkpoint covering all 5 ROADMAP success criteria. (Completed 2026-05-11; all 5 success criteria verified — `phase-1-complete`. Two post-execution bug fixes in 28c5d20.)
 
 ### Phase 2: Search Input & NL Parsing
 **Goal:** Build the search-entry experience: a user types a natural-language apartment query, sees it parsed into structured editable chips with flex toggles, and submits to a "searching" state. Frontend-only, backed by mock data.
@@ -117,7 +117,7 @@
 
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
-| 1. Foundation Skeleton | 2/3 | Active | - |
+| 1. Foundation Skeleton | 3/3 | Complete | 2026-05-11 |
 | 2. Search Input & NL Parsing | 0/0 | Not started | - |
 | 3. First Scraper + Map Results | 0/0 | Not started | - |
 | 4. LLM Extraction & Multi-Source | 0/0 | Not started | - |

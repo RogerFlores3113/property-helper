@@ -31,7 +31,8 @@ key-files:
   created:
     - "frontend/app/types.ts"
   modified:
-    - "frontend/app/page.tsx (null placeholder → full Phase 1 UI)"
+    - "frontend/app/page.tsx (null placeholder → full Phase 1 UI; pull-on-connect race fix in 28c5d20)"
+    - "backend/app/routes/jobs.py (jsonb data parsing fix in 28c5d20)"
 
 key-decisions:
   - "Subscribe in reattach AFTER GET resolves: seeds initial listings first, then mergeById dedupes any INSERT echo that arrives during the small window"
@@ -47,11 +48,12 @@ patterns-established:
 requirements-completed: [CACH-03, CACH-04]
 
 metrics:
-  duration: ~15min (Task 1 only; Task 2 is a human-verify checkpoint)
-  tasks: 1 of 2 (Task 2 is checkpoint:human-verify, blocking gate)
+  duration: ~15min code + manual smoke (Task 2 human-verify passed 2026-05-11)
+  tasks: 2 of 2 (Task 1 auto; Task 2 checkpoint:human-verify resumed with `phase-1-complete`)
   files_created: 1
-  files_modified: 1
+  files_modified: 2
 completed: 2026-05-11
+status: complete
 ---
 
 # Phase 01 Plan 03: Frontend Slice Summary
@@ -88,8 +90,10 @@ completed: 2026-05-11
 ## Task Commits
 
 1. **Task 1: Implement page.tsx with Realtime streaming + reattach** — `ee238b6` (feat)
-
-Task 2 is `checkpoint:human-verify` — no code commit, awaiting end-to-end manual smoke verification (see below).
+2. **Task 2: end-to-end manual smoke (checkpoint:human-verify)** — passed 2026-05-11 with resume signal `phase-1-complete`.
+3. **Post-execution bug fixes** — `28c5d20` (fix): two small defects discovered during the manual smoke and patched before resume:
+   - `backend/app/routes/jobs.py`: GET endpoint now parses `data` as jsonb (was returning a string for serialized payloads, breaking frontend rendering on reattach).
+   - `frontend/app/page.tsx`: pull-on-connect race condition fix — after `supabase.channel(...).subscribe()` reaches `SUBSCRIBED`, fetch the latest rows via GET to catch any INSERTs that occurred between the POST response and the channel becoming live (RESEARCH Pitfall 1, second leg). `mergeById` already de-dupes the overlap.
 
 ## Files Created/Modified
 
@@ -114,9 +118,25 @@ Task 2 is `checkpoint:human-verify` — no code commit, awaiting end-to-end manu
 
 ## Deviations from Plan
 
-None.
+### Auto-fixed Issues (post-execution, surfaced by Task 2 smoke)
 
-- The plan-required structure, copywriting strings, state shape, helper signatures, channel filter syntax, and render order all match. The only nitpick worth recording is cosmetic: the StartSearchButton and JobStatusBadge are rendered as sibling block-level elements with the badge `ml-3` to keep them on the same visual line — UI-SPEC describes them as separate "components" without prescribing layout adjacency, and the spec's 4px/8px tokens permit this.
+**1. [Rule 1 — Bug] GET /api/jobs/{id} returned `data` as JSON string instead of parsed jsonb**
+- **Found during:** Task 2 manual smoke — SC #3 (fire-and-forget reload)
+- **Issue:** Closing/reopening the tab fetched the job but listing cards rendered blank because `data` came back as an unparsed string.
+- **Fix:** Parse jsonb server-side before returning in `backend/app/routes/jobs.py`.
+- **Files modified:** `backend/app/routes/jobs.py`
+- **Commit:** `28c5d20`
+
+**2. [Rule 1 — Bug] Subscribe-before-INSERT race could drop first batch**
+- **Found during:** Task 2 manual smoke — SC #2 (Realtime streaming)
+- **Issue:** Small window between POST returning and Realtime channel reaching `SUBSCRIBED` could lose the first INSERT(s).
+- **Fix:** Pull-on-connect — issue a GET when the channel transitions to `SUBSCRIBED` and merge via `mergeById` (idempotent). Mirrors the reattach pull pattern (RESEARCH Pitfall 1, second leg).
+- **Files modified:** `frontend/app/page.tsx`
+- **Commit:** `28c5d20`
+
+### Cosmetic notes
+
+- The plan-required structure, copywriting strings, state shape, helper signatures, channel filter syntax, and render order all match. StartSearchButton and JobStatusBadge are rendered as sibling block-level elements with the badge `ml-3` to keep them on the same visual line — UI-SPEC describes them as separate "components" without prescribing layout adjacency, and the spec's 4px/8px tokens permit this.
 
 ## Issues Encountered
 
@@ -144,7 +164,24 @@ All literal-substring greps from `<verify>` pass:
 
 ### Manual Smoke (Task 2 — checkpoint:human-verify)
 
-**Status:** awaiting human execution.
+**Status:** PASSED 2026-05-11 — resume signal `phase-1-complete`.
+
+**Results per ROADMAP success criterion:**
+
+| SC | Criterion | Result | Notes |
+|----|-----------|--------|-------|
+| 1 | Start search enqueues ARQ job + Supabase row with status=running | PASS | — |
+| 2 | Fake listings stream to browser via Realtime within ~1s, no refresh | PASS | required pull-on-connect fix in 28c5d20 to close subscribe-window race |
+| 3 | Close/reopen tab still shows in-progress or completed job (fire-and-forget) | PASS | required jsonb parsing fix in 28c5d20 for GET /api/jobs/{id} payload |
+| 4 | Listings stored at ~300–500 chars structured data | PASS | all rows ~315 chars (matches `test_payload_size` lock) |
+| 5 | Cost guardrails honored + daily_spend row written per simulated LLM call | PASS | `uv run pytest tests/ -q` → 7 passed (with `SUPABASE_DB_URL` exported); `daily_spend` row shows `estimated_tokens=4500` for the smoke run |
+
+**Bug fixes during smoke (committed in 28c5d20, after the original SUMMARY commit at 77f2e61):**
+
+1. **GET /api/jobs/{id} jsonb parsing** — backend was returning `data` as a JSON string instead of a parsed object, so the reattach path rendered nothing. Fixed by parsing jsonb server-side before returning.
+2. **Pull-on-connect race condition** — small window between POST response and Realtime channel reaching `SUBSCRIBED` could drop the first INSERT batch. Fixed by issuing a GET when the channel transitions to `SUBSCRIBED` and merging via `mergeById` (idempotent). Matches RESEARCH Pattern 7 / Pitfall 1 second leg.
+
+Both fixes are bugs in the as-shipped Task 1 implementation discovered by Task 2 smoke — recorded here under Deviations (Rule 1 — Bug) below.
 
 The end-to-end manual smoke covers all 5 ROADMAP Phase 1 success criteria as one continuous exercise. Pre-flight requires 4 terminals (Redis via docker compose, FastAPI via uvicorn, ARQ worker via `uv run arq`, Next.js via `npm run dev`). The plan's `<how-to-verify>` section is the authoritative script; key checkpoints:
 
@@ -168,10 +205,13 @@ The end-to-end manual smoke covers all 5 ROADMAP Phase 1 success criteria as one
 
 - FOUND: frontend/app/types.ts
 - FOUND: frontend/app/page.tsx (modified)
-- FOUND commit: ee238b6
+- FOUND: backend/app/routes/jobs.py (modified, fix commit)
+- FOUND commit: ee238b6 (Task 1 feat)
+- FOUND commit: 28c5d20 (post-execution bug fixes)
 - npm run build: ✓ Compiled successfully in 1690ms; 5 static pages prerendered
+- Task 2 manual smoke: PASSED (all 5 ROADMAP success criteria, resume signal `phase-1-complete`)
 
 ---
 *Phase: 01-foundation-skeleton*
-*Completed (code): 2026-05-11*
-*Task 2 manual smoke: awaiting human verification*
+*Completed: 2026-05-11*
+*Plan 01-03: complete*
