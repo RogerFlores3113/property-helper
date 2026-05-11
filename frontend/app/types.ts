@@ -27,3 +27,18 @@ export type SearchJob = {
 };
 
 export type JobResponse = { job: SearchJob | null; listings: Listing[] };
+
+export type ChipType = 'beds' | 'max_price' | 'min_price' | 'baths' | 'amenity' | 'location';
+
+export type Chip = {
+  id: string;
+  type: ChipType;
+  value: number | string;
+  flex: boolean;
+};
+
+export type JobPostPayload = {
+  query: string;
+  chips: Chip[];
+  global_flex: boolean;
+};
