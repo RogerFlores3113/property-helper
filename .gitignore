@@ -1,0 +1,16 @@
+.planning/
+
+# Backend
+backend/.env
+backend/.venv/
+backend/__pycache__/
+backend/.pytest_cache/
+**/__pycache__/
+**/.pytest_cache/
+
+# Frontend
+frontend/.env.local
+frontend/.next/
+frontend/node_modules/
+
+# Note: lockfiles (backend/uv.lock, frontend/package-lock.json) MUST be committed.
