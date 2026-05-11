@@ -1,6 +1,7 @@
 """POST /api/jobs and GET /api/jobs/{id} — fire-and-forget endpoint (CACH-03)."""
 from __future__ import annotations
 
+import json
 import uuid
 
 from arq.connections import ArqRedis, RedisSettings, create_pool
@@ -76,7 +77,7 @@ async def get_job(job_id: UUID4) -> dict:
             {
                 "id": str(row["id"]),
                 "job_id": str(row["job_id"]),
-                "data": row["data"],
+                "data": json.loads(row["data"]) if isinstance(row["data"], str) else row["data"],
                 "photo_url": row["photo_url"],
                 "created_at": row["created_at"].isoformat() if row["created_at"] else None,
             }

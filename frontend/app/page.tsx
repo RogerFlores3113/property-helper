@@ -146,8 +146,17 @@ export default function Home() {
       localStorage.setItem(LOCALSTORAGE_KEY, body.job_id);
       setJobId(body.job_id);
       setResumed(false);
-      // Subscribe BEFORE returning so we don't miss early INSERTs.
+      // Subscribe first, then pull-on-connect to catch any INSERTs that raced
+      // ahead of the channel becoming active.
       subscribe(body.job_id);
+      try {
+        const catchup = await fetch(`${API_URL}/api/jobs/${body.job_id}`);
+        if (catchup.ok) {
+          const cb = (await catchup.json()) as JobResponse;
+          if (cb.listings?.length) setListings((prev) => mergeById(prev, cb.listings));
+          if (cb.job?.status) setStatus(cb.job.status);
+        }
+      } catch { /* non-fatal — Realtime will fill in any gaps */ }
     } catch {
       setError(
         "Couldn't start the job. Check that the backend (uvicorn) and Redis are running, then try again.",
