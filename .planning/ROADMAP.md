@@ -43,7 +43,10 @@
 2. User can edit or remove individual chips and see the change reflected in the parsed query state.
 3. User can toggle an overall "willing to flex" mode and toggle flex on individual chips independently.
 4. Submitting the search immediately enters a "searching" state and never prompts a clarifying question mid-run.
-**Plans:** TBD
+**Plans:** 3 plans
+- [ ] 02-01-PLAN.md — Test scaffold + NL parser: Vitest config + jsdom, parseQuery() pure function (TDD red→green), ChipType/Chip/JobPostPayload types, RED component test stubs for ChipList and SearchForm. (SRCH-01)
+- [ ] 02-02-PLAN.md — Chip UI components: ChipList.tsx (ChipPill static/edit + AddFilter) and SearchForm.tsx (textarea + debounce + GlobalFlexToggle). Turns Plan 01 RED stubs GREEN. (SRCH-01, SRCH-02, SRCH-03, SRCH-04)
+- [ ] 02-03-PLAN.md — Page wiring + smoke: refactor page.tsx to mount SearchForm, enrich POST /api/jobs payload (chips + global_flex), update copy per UI-SPEC, end-to-end manual smoke verifying all 4 success criteria. (SRCH-01–05)
 **UI hint**: yes
 
 ### Phase 3: First Scraper + Map Results
@@ -118,7 +121,7 @@
 | Phase | Plans Complete | Status | Completed |
 |-------|----------------|--------|-----------|
 | 1. Foundation Skeleton | 3/3 | Complete | 2026-05-11 |
-| 2. Search Input & NL Parsing | 0/0 | Not started | - |
+| 2. Search Input & NL Parsing | 0/3 | In progress | - |
 | 3. First Scraper + Map Results | 0/0 | Not started | - |
 | 4. LLM Extraction & Multi-Source | 0/0 | Not started | - |
 | 5. Cache, Dedup & Freshness | 0/0 | Not started | - |
