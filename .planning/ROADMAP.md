@@ -45,7 +45,7 @@
 4. Submitting the search immediately enters a "searching" state and never prompts a clarifying question mid-run.
 **Plans:** 3 plans
 - [x] 02-01-PLAN.md — Test scaffold + NL parser: Vitest config + jsdom, parseQuery() pure function (TDD red→green), ChipType/Chip/JobPostPayload types, RED component test stubs for ChipList and SearchForm. (SRCH-01)
-- [ ] 02-02-PLAN.md — Chip UI components: ChipList.tsx (ChipPill static/edit + AddFilter) and SearchForm.tsx (textarea + debounce + GlobalFlexToggle). Turns Plan 01 RED stubs GREEN. (SRCH-01, SRCH-02, SRCH-03, SRCH-04)
+- [x] 02-02-PLAN.md — Chip UI components: ChipList.tsx (ChipPill static/edit + AddFilter) and SearchForm.tsx (textarea + debounce + GlobalFlexToggle). Turns Plan 01 RED stubs GREEN. (SRCH-01, SRCH-02, SRCH-03, SRCH-04)
 - [ ] 02-03-PLAN.md — Page wiring + smoke: refactor page.tsx to mount SearchForm, enrich POST /api/jobs payload (chips + global_flex), update copy per UI-SPEC, end-to-end manual smoke verifying all 4 success criteria. (SRCH-01–05)
 **UI hint**: yes
 
@@ -58,7 +58,10 @@
 2. Hovering a result card highlights its map pin and vice versa; clicking a pin or card opens a detail view with address, price, beds/baths, amenities, source name, source link, photo preview, and a "data from X date" label.
 3. Before scraping any domain, the worker fetches and respects robots.txt and skips disallowed paths (verifiable in the job's scraper log).
 4. Each listing displays a freshness label and a direct link back to its original Craigslist source.
-**Plans:** TBD
+**Plans:** 3 plans
+- [x] 03-01-PLAN.md — Backend: capture Craigslist fixtures, RobotsCache (protego), Craigslist parser/scraper replacing stub_scraper, CreateJobBody chips/global_flex; full backend test suite green (SCRAP-02, SCRAP-05).
+- [ ] 03-02-PLAN.md — Frontend: vitest config + types lat/lng/source_name; MapView (MapLibre + OpenFreeMap positron + clustering), ListingList, ListingCard, ListingDrawer, safeUrl helpers; page.tsx D-11 side-by-side layout (MAP-01–04).
+- [ ] 03-03-PLAN.md — End-to-end manual smoke checkpoint verifying SC#1–#4 on live stack (resume signal phase-3-complete).
 **UI hint**: yes
 
 ### Phase 4: LLM Extraction & Multi-Source
