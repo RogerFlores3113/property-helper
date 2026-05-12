@@ -29,7 +29,7 @@
 
 ### Caching & Freshness
 
-- [ ] **CACH-01**: New searches check the shared listing cache first; cached listings matching the query's geographic bounding box and filters are returned instantly without re-scraping
+- [x] **CACH-01**: New searches check the shared listing cache first; cached listings matching the query's geographic bounding box and filters are returned instantly without re-scraping
 - [ ] **CACH-02**: Listings expire after 3–4 weeks (TTL); expired listings are labeled "data from X date" and the user is offered a "re-search" option to scrape fresh data
 - [ ] **CACH-03**: Search job persists in Supabase so the user can close the tab and return later to find completed results (fire-and-forget)
 - [ ] **CACH-04**: Each listing is stored at ~300–500 characters of structured data to stay within Supabase 500MB free tier; photos are stored as URLs only
@@ -138,7 +138,7 @@
 | SCRAP-04 | Phase 4 | Pending |
 | SCRAP-06 | Phase 4 | Pending |
 | SCRAP-07 | Phase 4 | Pending |
-| CACH-01 | Phase 5 | Pending |
+| CACH-01 | Phase 5 | Complete (05-02) |
 | CACH-02 | Phase 5 | Pending |
 | SCRAP-08 | Phase 5 | Pending |
 | AUTH-01 | Phase 6 | Pending |
