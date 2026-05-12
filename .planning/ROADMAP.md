@@ -134,8 +134,8 @@
 | 1. Foundation Skeleton | 3/3 | Complete | 2026-05-11 |
 | 2. Search Input & NL Parsing | 3/3 | Complete | 2026-05-11 |
 | 3. First Scraper + Map Results | 3/3 | Complete | 2026-05-12 |
-| 4. LLM Extraction & Multi-Source | 0/4 | Planning | - |
-| 5. Cache, Dedup & Freshness | 0/4 | Planning | - |
+| 4. LLM Extraction & Multi-Source | 4/4 | Complete | 2026-05-12 |
+| 5. Cache, Dedup & Freshness | 1/4 | In progress | - |
 | 6. Auth | 0/0 | Not started | - |
 | 7. Dashboard | 0/0 | Not started | - |
 | 8. Observability | 0/0 | Not started | - |

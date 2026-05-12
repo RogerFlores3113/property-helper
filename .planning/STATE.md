@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 05
 status: executing
-stopped_at: Phase 5 planned — 4 plans ready to execute
-last_updated: "2026-05-12T07:26:26.353Z"
+stopped_at: Plan 05-01 complete — migration 0002 pushed to live Supabase, RED scaffolds committed
+last_updated: "2026-05-12T07:45:00.000Z"
 progress:
   total_phases: 8
   completed_phases: 4
   total_plans: 17
-  completed_plans: 14
-  percent: 82
+  completed_plans: 15
+  percent: 88
 ---
 
 # Project State
@@ -54,6 +54,7 @@ Status: Executing Phase 05
 - 2026-05-12: Completed Plan 03-01 — replaced stub_scraper with real Craigslist scraper (httpx + selectolax + protego); RobotsCache enforces SCRAP-05 (one-fetch-per-origin, structlog SC#3 audit, fail-open on 5xx); parse_listing extracts lat/lng (D-07, range-validated), price/beds/baths/amenities/posted_date/source_url/source_name; photo URL whitelisted to craigslist.org/craigslistimages.org (T-03-05); SCRAPER_MAX_LISTINGS clamped to ≤30 (T-03-06); CreateJobBody now type-validates Phase 2 chips/global_flex (Pitfall 9, chip persistence deferred to Phase 4). +10 backend tests (17 total). SCRAP-02 + SCRAP-05 marked complete.
 - 2026-05-12: Completed Plan 03-02 — MapView (MapLibre + OpenFreeMap positron) with cluster source + price-pin symbol layer + setFeatureState hover/select sync (`promoteId:'id'`); ListingList with cardRefs Map for D-14 scroll-into-view; React.memo ListingCard with custom comparator (Pitfall 8); slide-out ListingDrawer (Escape/× close); safeUrl.ts host-whitelist helpers (T-03-09/T-03-10) gate every rendered source link and photo URL. page.tsx now uses D-11 side-by-side grid while preserving Realtime subscription verbatim; Pitfall 6 reset (`setSelectedId(null); setHoveredId(null);`) added to startSearch. +4 frontend test files / +18 tests (28 total). MAP-01/02/03/04 marked complete. Bundle +275 kB (maplibre-gl).
 - 2026-05-12: Plan 05-01 Tasks 1+3 complete (commits 0223d15, 286d2c3) — migration 0002 file ready + 19 RED tests (4 new files + 3 extended). Task 2 (`checkpoint:human-action`, blocking) awaits user: run `cd backend && npx supabase db push` and confirm verification SQL, then resume signal `migration-0002-pushed`.
+- 2026-05-12: **Plan 05-01 complete.** Task 2 closed — user ran `npx supabase db push` successfully; `supabase migration list` confirms Local = Remote for migration `20260512000002_cache_dedup_freshness`. Required `supabase/config.toml` + `supabase/migrations/` scaffold committed at 33c6686. Resume signal `migration-0002-pushed` received. Schema diff (expires_at NOT NULL/default 28d, dedup_key, filter_hash, chips, 3 indexes) live on dev project. Plan 05-02 unblocked.
 - 2026-05-12: Completed Phase 4 — llm-extraction-multi-source. Plan 04-01: CR-01/CR-02 hardened (Field max_length, safeUrl suffix fix), isAllowedApartmentsUrl added, ANTHROPIC_API_KEY enforced at import, 6 RED scaffolds. Plan 04-02: prefilter.py (≥5× reduction), llm_extract.py (Haiku 4.5 forced tool-use + prompt caching + Sonnet escalation), rate_limit.py (Redis SET NX PX + jitter). Plan 04-03: run_search_coordinator fan-out, mark_done atomic counter, Craigslist renamed + rate-limited. Plan 04-04: run_search_apartments (Playwright + stealth + prefilter + LLM), ENABLED_SOURCES=["craigslist","apartments"]. phase-4-smoke verified (SC#1–SC#4). 55 tests passing. **Phase 4 complete.**
 
 ## Decisions Accumulated
@@ -87,13 +88,12 @@ Status: Executing Phase 05
 
 ## Session Continuity
 
-Last session: 2026-05-12T07:26:19.105Z
-Stopped at: Phase 5 planned — 4 plans ready to execute
+Last session: 2026-05-12T07:45:00.000Z
+Stopped at: Plan 05-01 complete — migration 0002 pushed to live Supabase, RED scaffolds committed
 Resume file: None
 
 ## Blockers / Concerns
 
-- ⏸ Plan 05-01 Task 2 OPEN — `checkpoint:human-action` blocking: user must run `cd backend && npx supabase db push` and confirm verification SQL (expires_at NOT NULL+default, dedup_key/filter_hash/chips nullable, three indexes, zero NULL expires_at rows, idempotency on second push). Resume signal: `migration-0002-pushed`.
 - ⚠ Phase 4 code review CR-01: `mark_done` uses 5 non-atomic Redis commands — race can write wrong terminal status. Fix with Lua script or MULTI/EXEC in Phase 5.
 - ⚠ Phase 4 code review CR-02: `asyncio.get_event_loop()` in rate_limit.py — deprecated since Python 3.10. Fix: `asyncio.get_running_loop()`.
 - ⚠ Phase 4 code review CR-03: LLM-supplied source_url can override authoritative URL in llm_extract.py — always use authoritative source_url unconditionally.
