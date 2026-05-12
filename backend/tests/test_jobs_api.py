@@ -136,7 +136,6 @@ async def test_query_max_length(clean_db, pg_pool, monkeypatch):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.red_phase_05
 async def test_create_job_persists_filter_hash_and_chips(
     clean_db, pg_pool, monkeypatch
 ):
@@ -181,7 +180,6 @@ async def test_create_job_persists_filter_hash_and_chips(
     assert got == posted
 
 
-@pytest.mark.red_phase_05
 async def test_get_job_exposes_expires_at_and_chips(clean_db, pg_pool, monkeypatch):
     """GET /api/jobs/{id} listings include `expires_at` ISO string; job
     payload includes `chips`."""

@@ -11,6 +11,7 @@ from pydantic import UUID4, BaseModel, Field
 
 from ..db import get_pool
 from ..settings import settings
+from ..workers.cache import compute_filter_hash
 
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
@@ -57,12 +58,19 @@ async def arq() -> ArqRedis:
 @router.post("")
 async def create_job(body: CreateJobBody) -> dict:
     job_id = str(uuid.uuid4())
+    filter_hash = compute_filter_hash(body.chips)
+    # Pitfall 1: serialize JSONB as text then cast `$N::jsonb` so asyncpg
+    # routes it through the explicit cast rather than its bytes codec.
+    chips_json = json.dumps([c.model_dump() for c in body.chips])
     pool = await get_pool()
     async with pool.acquire() as conn:
         await conn.execute(
-            "INSERT INTO search_jobs (id, status, query) VALUES ($1, 'pending', $2)",
+            "INSERT INTO search_jobs (id, status, query, filter_hash, chips) "
+            "VALUES ($1, 'pending', $2, $3, $4::jsonb)",
             job_id,
             body.query,
+            filter_hash,
+            chips_json,
         )
     redis = await arq()
     await redis.enqueue_job("run_search_coordinator", job_id)
@@ -75,16 +83,21 @@ async def get_job(job_id: UUID4) -> dict:
     pool = await get_pool()
     async with pool.acquire() as conn:
         job = await conn.fetchrow(
-            "SELECT id, status, query, created_at, completed_at FROM search_jobs WHERE id = $1",
+            "SELECT id, status, query, created_at, completed_at, chips "
+            "FROM search_jobs WHERE id = $1",
             job_id,
         )
         if job is None:
             raise HTTPException(status_code=404, detail="job not found")
         listings = await conn.fetch(
-            "SELECT id, job_id, data, photo_url, created_at FROM listings "
+            "SELECT id, job_id, data, photo_url, created_at, expires_at FROM listings "
             "WHERE job_id = $1 ORDER BY created_at ASC",
             job_id,
         )
+
+    chips_value = job["chips"]
+    if isinstance(chips_value, str):
+        chips_value = json.loads(chips_value)
 
     return {
         "job": {
@@ -95,6 +108,7 @@ async def get_job(job_id: UUID4) -> dict:
             "completed_at": (
                 job["completed_at"].isoformat() if job["completed_at"] else None
             ),
+            "chips": chips_value,
         },
         "listings": [
             {
@@ -103,6 +117,7 @@ async def get_job(job_id: UUID4) -> dict:
                 "data": json.loads(row["data"]) if isinstance(row["data"], str) else row["data"],
                 "photo_url": row["photo_url"],
                 "created_at": row["created_at"].isoformat() if row["created_at"] else None,
+                "expires_at": row["expires_at"].isoformat() if row["expires_at"] else None,
             }
             for row in listings
         ],
