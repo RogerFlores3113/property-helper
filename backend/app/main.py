@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from .db import close_pool, init_pool
 from .logging import configure_logging
-from .routes import jobs
+from .routes import jobs, listings
 
 configure_logging()
 
@@ -33,3 +33,4 @@ app.add_middleware(
 )
 
 app.include_router(jobs.router)
+app.include_router(listings.router)

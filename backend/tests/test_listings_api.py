@@ -15,13 +15,10 @@ import uuid
 from datetime import datetime, timedelta, timezone
 
 import httpx
-import pytest
 
 from app import db as db_module
 from app.main import app as main_app
-from app.routes import listings as listings_route  # noqa: F401 — RED import
-
-pytestmark = pytest.mark.red_phase_05
+from app.routes import listings as listings_route  # noqa: F401
 
 
 async def test_extend_bumps_expires_at(clean_db, pg_pool, monkeypatch):
