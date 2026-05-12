@@ -80,10 +80,33 @@ async def test_fire_and_forget(clean_db, pg_pool, monkeypatch):
         assert bad_id.status_code == 422
 
     # Verify the enqueue side-effect fired exactly once for the POST.
+    # Plan 04-03: POST enqueues the coordinator, not the source sub-task.
     assert len(stub.calls) == 1
     fn, args, _ = stub.calls[0]
-    assert fn == "run_search"
+    assert fn == "run_search_coordinator"
     assert args[0] == job_id
+
+
+async def test_jobs_post_enqueues_coordinator(clean_db, pg_pool, monkeypatch):
+    """Plan 04-03: POST /api/jobs enqueues run_search_coordinator (not run_search)."""
+    monkeypatch.setattr(db_module, "_pool", pg_pool)
+    stub = _StubArq()
+
+    async def fake_arq():
+        return stub
+
+    monkeypatch.setattr(jobs_route, "arq", fake_arq)
+
+    transport = httpx.ASGITransport(app=main_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post("/api/jobs", json={"query": "sf bay area"})
+        assert resp.status_code == 200
+
+    assert len(stub.calls) == 1
+    fn, args, _ = stub.calls[0]
+    assert fn == "run_search_coordinator", (
+        f"POST /api/jobs must enqueue run_search_coordinator; got {fn!r}"
+    )
 
 
 async def test_query_max_length(clean_db, pg_pool, monkeypatch):

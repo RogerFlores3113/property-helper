@@ -65,7 +65,7 @@ async def create_job(body: CreateJobBody) -> dict:
             body.query,
         )
     redis = await arq()
-    await redis.enqueue_job("run_search", job_id)
+    await redis.enqueue_job("run_search_coordinator", job_id)
     return {"job_id": job_id, "status": "pending"}
 
 
