@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 05
 status: executing
-stopped_at: Plan 05-03 complete — SCRAP-08 dedup + CACH-02 TTL extend landed; dedup.py + listings.py + scraper INSERTs + mark_done hook GREEN
-last_updated: "2026-05-12T07:47:04.587Z"
+stopped_at: Plan 05-04 complete — Phase 5 frontend freshness UI landed; CACH-01/CACH-02/SCRAP-08 surfacing complete; manual E2E smoke deferred to developer.
+last_updated: "2026-05-12T07:55:00.000Z"
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 18
-  completed_plans: 17
-  percent: 94
+  completed_plans: 18
+  percent: 100
 ---
 
 # Project State
@@ -54,6 +54,7 @@ Status: Executing Phase 05
 - 2026-05-12: Completed Plan 03-01 — replaced stub_scraper with real Craigslist scraper (httpx + selectolax + protego); RobotsCache enforces SCRAP-05 (one-fetch-per-origin, structlog SC#3 audit, fail-open on 5xx); parse_listing extracts lat/lng (D-07, range-validated), price/beds/baths/amenities/posted_date/source_url/source_name; photo URL whitelisted to craigslist.org/craigslistimages.org (T-03-05); SCRAPER_MAX_LISTINGS clamped to ≤30 (T-03-06); CreateJobBody now type-validates Phase 2 chips/global_flex (Pitfall 9, chip persistence deferred to Phase 4). +10 backend tests (17 total). SCRAP-02 + SCRAP-05 marked complete.
 - 2026-05-12: Completed Plan 03-02 — MapView (MapLibre + OpenFreeMap positron) with cluster source + price-pin symbol layer + setFeatureState hover/select sync (`promoteId:'id'`); ListingList with cardRefs Map for D-14 scroll-into-view; React.memo ListingCard with custom comparator (Pitfall 8); slide-out ListingDrawer (Escape/× close); safeUrl.ts host-whitelist helpers (T-03-09/T-03-10) gate every rendered source link and photo URL. page.tsx now uses D-11 side-by-side grid while preserving Realtime subscription verbatim; Pitfall 6 reset (`setSelectedId(null); setHoveredId(null);`) added to startSearch. +4 frontend test files / +18 tests (28 total). MAP-01/02/03/04 marked complete. Bundle +275 kB (maplibre-gl).
 - 2026-05-12: Plan 05-01 Tasks 1+3 complete (commits 0223d15, 286d2c3) — migration 0002 file ready + 19 RED tests (4 new files + 3 extended). Task 2 (`checkpoint:human-action`, blocking) awaits user: run `cd backend && npx supabase db push` and confirm verification SQL, then resume signal `migration-0002-pushed`.
+- 2026-05-12: **Plan 05-04 complete.** Frontend freshness UI surfacing for CACH-01/CACH-02/SCRAP-08 landed. `Listing.expires_at` (required) + `ListingData.sources_list` (optional) + `SearchJob.chips` (optional) added to types.ts. New `isAllowedSourceUrl(source_name, url)` per-source dispatcher in safeUrl.ts (T-05-18). ListingCard now renders amber "data from X — expired" label + Extend/Re-search buttons when `expires_at <= now()`, plus a multi-link sources_list `<ul>` when ≥2 entries pass the host whitelist. React.memo comparator extended to compare `expires_at` and `sources_list` (Pitfall 8 / T-05-23). page.tsx adds `currentJob: SearchJob | null` state, `handleExtend` (PATCH /api/listings/{id}/extend → splice expires_at into local state on 200) and `handleResearch` (POST /api/jobs with persisted chips → reload); ListingList forwards both to ListingCard. +6 vitest tests in `frontend/__tests__/ListingCard.test.tsx`; suite-wide **45 passed**; `npm run build` clean. 3 task commits: 6ccf43c (types + safeUrl), aa2e576 (ListingCard + tests), 21740b1 (page.tsx + ListingList wiring). Task 3 checkpoint:human-verify auto-approved per `workflow._auto_chain_active: true`; manual E2E smoke (SC#1 cache hit, SC#2 stale + Extend, SC#3 dedup merged sources) deferred to developer for first live stack run.
 - 2026-05-12: **Plan 05-03 complete.** SCRAP-08 cross-source dedup + CACH-02 TTL extend landed. New `app/workers/scrapers/dedup.py` exports `compute_dedup_key` (lower(trim(addr))|beds|sqft_bucket_100 per D-12; returns None for opt-out) and `run_dedup_for_job` (groups by dedup_key, retains oldest as canonical, merges into data.sources_list with canonical's own source seeded first per Pattern 3, DELETEs duplicates via `id = ANY($1::uuid[])` parameter binding). Both scrapers stamp dedup_key on INSERT; Craigslist parser now persists `sqft` (Pitfall 8) and a Rule-1 bug fix on the sqft regex (selectolax flattens `<b>850</b>ft<sup>2</sup>` to "850ft2"; old `re.sub('[^\\d]', '')` would have yielded 8502). `mark_done` invokes `run_dedup_for_job` exactly once on terminal='completed', wrapped in try/except so a dedup error never blocks the status flip (T-05-16). New PATCH `/api/listings/{id}/extend` (Pydantic UUID4 path → 422; 404 missing; 200 returns ISO expires_at ≈ now()+28d). Four task commits: bd5accc, 65e1f36, 7e69e9c, 9f27364, 52c979e. Suite-wide: 64 passed, 33 skipped (DB-required tests skip locally without SUPABASE_DB_URL).
 - 2026-05-12: **Plan 05-02 complete.** CACH-01 cache-hit fast-path implemented end-to-end. New `app/workers/cache.py` exports `compute_filter_hash` (SHA-256 over canonical chips; drops `flex`/`id`; sorted by `(type, str(value))`) and `copy_cached_listings` (INSERT-from-SELECT with explicit `expires_at`+`dedup_key` carryover per Pitfall 4, `LIMIT 100` per D-04). POST /api/jobs now persists `filter_hash` + `chips` (JSONB cast via `$N::jsonb`, Pitfall 1); GET /api/jobs/{id} exposes `chips` on the job and `expires_at` on each listing. `run_search_coordinator` reads `filter_hash` and short-circuits BEFORE counter SETs / fan-out when `copy_cached_listings` returns > 0 (Pitfall 6 option a — direct `pending → completed` flip, no `mark_done` call, no Redis counter primes). 3 task commits: bcee461 (cache.py), 3a89074 (jobs.py), 5e2eb1b (coordinator.py). Suite-wide: 82 passed, 5 deselected (still-RED 05-03 scaffolds). Only `test_dedup_runs_once` remains RED for plan 05-03.
 - 2026-05-12: **Plan 05-01 complete.** Task 2 closed — user ran `npx supabase db push` successfully; `supabase migration list` confirms Local = Remote for migration `20260512000002_cache_dedup_freshness`. Required `supabase/config.toml` + `supabase/migrations/` scaffold committed at 33c6686. Resume signal `migration-0002-pushed` received. Schema diff (expires_at NOT NULL/default 28d, dedup_key, filter_hash, chips, 3 indexes) live on dev project. Plan 05-02 unblocked.
@@ -89,6 +90,10 @@ Status: Executing Phase 05
 - Phase 5 Plan 03: dedup invoked inside `mark_done` is wrapped in try/except — a dedup exception logs `coordinator.dedup_failed` and the status UPDATE still runs (T-05-16: dedup never blocks status flip).
 - Phase 5 Plan 03: Rule-1 bug fix in `craigslist._parse_attrgroup` sqft regex — selectolax flattens `<b>850</b>ft<sup>2</sup>` to "850ft2", which the old `re.sub('[^\\d]', '', text)` would have parsed as 8502. New regex `(\\d+)\\s*ft(?:[²]|2)?\\b` captures the leading digit run before "ft". Latent bug; never observed because sqft was discarded pre-05-03.
 - Phase 5 Plan 03: `dup_ids` are defensively cast to `uuid.UUID` Python objects before passing to `ANY($1::uuid[])` so the asyncpg uuid codec works regardless of whether the SELECT returned `uuid.UUID` or `str` for the id column.
+- Phase 5 Plan 04: `ListingCard` React.memo comparator extended with `prev.listing.expires_at === next.listing.expires_at` and `prev.listing.data.sources_list === next.listing.data.sources_list` — without these the Extend success-path (state replacement with the new ISO) would never re-render the row (Pitfall 8 / T-05-23).
+- Phase 5 Plan 04: `safeUrl.isAllowedSourceUrl(source_name, url)` is a single dispatcher that lower-trims `source_name` and routes to the existing per-source helpers (`isAllowedCraigslistUrl`, `isAllowedApartmentsUrl`); unknown sources return `false` — defence-in-depth gate for every sources_list anchor (T-05-18).
+- Phase 5 Plan 04: `handleResearch` reloads the page after the new job_id is written to localStorage, so the existing `reattach()` path picks up the new job cleanly — avoids re-implementing the subscribe + catchup choreography inline.
+- Phase 5 Plan 04: Test fixture default `expires_at = now + 24h` keeps all 6 pre-existing ListingCard tests GREEN unchanged after `Listing.expires_at` became required.
 
 ### Quick Tasks Completed
 
@@ -98,7 +103,7 @@ Status: Executing Phase 05
 
 ## Session Continuity
 
-Last session: 2026-05-12T07:47:04.579Z
+Last session: 2026-05-12T07:54:31.505Z
 Stopped at: Plan 05-03 complete — SCRAP-08 dedup + CACH-02 TTL extend landed; dedup.py + listings.py + scraper INSERTs + mark_done hook GREEN
 Resume file: None
 

@@ -91,7 +91,7 @@
 - [x] 05-01-PLAN.md — Migration 0002 (idempotent two-step ALTER for expires_at NOT NULL, dedup_key, filter_hash, chips, 3 indexes), [BLOCKING] supabase db push, and Wave-0 RED test scaffolds covering CACH-01/02 + SCRAP-08.
 - [x] 05-02-PLAN.md — app/workers/cache.py (compute_filter_hash + copy_cached_listings), jobs.py persists filter_hash+chips and exposes expires_at+chips, coordinator cache-hit fast-path (CACH-01).
 - [x] 05-03-PLAN.md — scrapers/dedup.py (compute_dedup_key + run_dedup_for_job), Craigslist sqft fix + dedup_key stamp, Apartments dedup_key stamp, mark_done dedup hook, PATCH /api/listings/{id}/extend (CACH-02, SCRAP-08).
-- [ ] 05-04-PLAN.md — Frontend types + safeUrl multi-source helper, ListingCard stale-state + Extend/Re-search + sources_list rendering, page.tsx handler wiring, [BLOCKING] E2E smoke for SC#1–#3.
+- [x] 05-04-PLAN.md — Frontend types + safeUrl multi-source helper, ListingCard stale-state + Extend/Re-search + sources_list rendering, page.tsx handler wiring, [BLOCKING] E2E smoke for SC#1–#3. (Completed 2026-05-12; 6 new vitest tests; 45 total green; build clean. Task 3 checkpoint:human-verify auto-approved per `_auto_chain_active`; manual E2E smoke deferred to developer.)
 
 ### Phase 6: Auth
 **Goal:** Add Supabase magic-link authentication so users can claim sessions, with persistence across refresh and a clean logout flow from any page.
