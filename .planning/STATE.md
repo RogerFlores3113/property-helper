@@ -4,14 +4,14 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 05
 status: executing
-stopped_at: Plan 05-04 complete — Phase 5 frontend freshness UI landed; CACH-01/CACH-02/SCRAP-08 surfacing complete; manual E2E smoke deferred to developer.
-last_updated: "2026-05-12T07:55:00.000Z"
+stopped_at: Plan 05-03 complete — SCRAP-08 dedup + CACH-02 TTL extend landed; dedup.py + listings.py + scraper INSERTs + mark_done hook GREEN
+last_updated: "2026-05-12T16:09:45.600Z"
 progress:
   total_phases: 8
-  completed_phases: 5
+  completed_phases: 4
   total_plans: 18
-  completed_plans: 18
-  percent: 100
+  completed_plans: 17
+  percent: 94
 ---
 
 # Project State
