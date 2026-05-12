@@ -73,7 +73,11 @@
 2. Listings are extracted by Claude Haiku via forced tool-use over HTML pre-filtered with selectolax + trafilatura; raw, unfiltered DOM is never sent to the LLM (logs show 5–10× token reduction vs raw).
 3. Apartments.com pages load via Playwright with stealth configuration and yield extracted listings on a typical run.
 4. Sustained scraping against any one domain never exceeds 1 req/sec (with 0.1–0.5s jitter) across concurrent workers, enforced by a Redis distributed token bucket.
-**Plans:** TBD
+**Plans:** 4 plans
+- [ ] 04-01-PLAN.md — CR-01/CR-02 debt fixes, isAllowedApartmentsUrl, ANTHROPIC_API_KEY Settings field, and six Wave-0 RED test scaffolds for downstream plans.
+- [ ] 04-02-PLAN.md — Shared utilities: prefilter (selectolax+trafilatura), llm_extract (Claude Haiku forced tool-use + cache + Sonnet escalation), rate_limit (Redis SET NX PX). SCRAP-04, SCRAP-06, SCRAP-07.
+- [ ] 04-03-PLAN.md — Coordinator (fan-out + completion counter + D-16 partial failure), Craigslist rename to run_search_craigslist + acquire_domain_slot wrapping, WorkerSettings + jobs.py rewire. SCRAP-03 + SCRAP-04.
+- [ ] 04-04-PLAN.md — Dockerfile to Playwright base image, location_to_apartments_url allowlist, apartments.py (Playwright + stealth + prefilter + llm_extract + rate_limit), ENABLED_SOURCES append, [BLOCKING] manual E2E smoke. SCRAP-01 + SC#1–#4.
 
 ### Phase 5: Cache, Dedup & Freshness
 **Goal:** Make repeat/overlapping searches feel instant via a shared bbox+filter-hash cache, merge duplicate listings across sources, and surface TTL/freshness state clearly to the user.
@@ -126,7 +130,7 @@
 | 1. Foundation Skeleton | 3/3 | Complete | 2026-05-11 |
 | 2. Search Input & NL Parsing | 3/3 | Complete | 2026-05-11 |
 | 3. First Scraper + Map Results | 3/3 | Complete | 2026-05-12 |
-| 4. LLM Extraction & Multi-Source | 0/0 | Not started | - |
+| 4. LLM Extraction & Multi-Source | 0/4 | Planning | - |
 | 5. Cache, Dedup & Freshness | 0/0 | Not started | - |
 | 6. Auth | 0/0 | Not started | - |
 | 7. Dashboard | 0/0 | Not started | - |
