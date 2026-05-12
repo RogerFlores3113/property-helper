@@ -1,17 +1,18 @@
-"""Craigslist apartments scraper — SCRAP-02, SCRAP-05, D-07.
+"""Craigslist apartments scraper — SCRAP-02, SCRAP-04, SCRAP-05, D-07.
 
-ARQ entrypoint: run_search(ctx, job_id)
+ARQ entrypoint: run_search_craigslist(ctx, job_id)
 Pure helpers: parse_search_results(html), parse_listing(html, source_url)
 
-Drop-in replacement for app.workers.stub_scraper.run_search — preserves the
-search_jobs status state machine, listings INSERT shape, BudgetGuard contract,
-and daily_spend write semantics (Pitfall 7: tokens=0 for non-LLM scraping).
+Renamed from run_search → run_search_craigslist in Plan 04-03 so the parallel
+coordinator (run_search_coordinator) can fan out one ARQ sub-task per source.
+Inline jitter sleeps replaced by acquire_domain_slot (Redis SET NX PX 1000)
+which serializes fetches across all workers (D-20 / SCRAP-04). Terminal
+status writes removed — mark_done (in app.workers.coordinator) is the only
+path that flips search_jobs.status to its terminal value (D-15).
 """
 from __future__ import annotations
 
-import asyncio
 import json
-import random
 import re
 import uuid
 from datetime import datetime, timezone
@@ -23,6 +24,8 @@ from selectolax.parser import HTMLParser
 
 from ...guards.budget import BudgetExceeded, BudgetGuard
 from ...settings import settings
+from ..coordinator import mark_done
+from ..rate_limit import acquire_domain_slot
 from .location import location_to_search_url
 from .robots import USER_AGENT, RobotsCache
 
@@ -236,23 +239,24 @@ def parse_listing(html: str, source_url: str) -> tuple[dict, str | None]:
 
 # ----------------------------- ARQ task --------------------------------------
 
-async def run_search(ctx, job_id: str) -> None:
-    """ARQ entrypoint — replaces stub_scraper.run_search.
+async def run_search_craigslist(ctx, job_id: str) -> None:
+    """ARQ sub-task — Craigslist source for the parallel coordinator (Plan 04-03).
 
-    Contract preserved from stub_scraper:
-      status: 'running' -> work -> 'completed' (or BudgetExceeded -> 'failed' + re-raise)
-      per-listing: guard.check_payload(len(serialized.encode()))
-      per-outer-iter: guard.check_iter(); record_spend(tokens=..., cost_usd=...)
-      INSERT INTO listings (id, job_id, data, photo_url, created_at)
+    Driven by run_search_coordinator. Status flips are owned exclusively by
+    mark_done (D-15) — this function never writes terminal status (completed
+    or failed) directly. Every outbound HTTP fetch is serialized through
+    acquire_domain_slot (D-20 / SCRAP-04), replacing the previous inline
+    per-process jitter (random.uniform with a half-second floor) which only
+    coordinated within a single worker process.
+
+    Calls mark_done(redis, db, job_id, failed=False) on success and
+    mark_done(redis, db, job_id, failed=True) on any exception (and re-raises).
     """
     db = ctx["db"]
+    redis = ctx["redis"]
     guard = BudgetGuard.from_env(db=db)
 
     try:
-        await db.execute(
-            "UPDATE search_jobs SET status='running' WHERE id=$1", job_id
-        )
-
         # 1. Read the job row for the query string (chips/global_flex ignored in Phase 3).
         job_row = await db.fetchrow(
             "SELECT query FROM search_jobs WHERE id=$1", job_id
@@ -264,10 +268,7 @@ async def run_search(ctx, job_id: str) -> None:
         if search_url is None:
             log.info("scraper.no_location_match", job_id=job_id, query=query[:80])
             await guard.record_spend(tokens=0, cost_usd=0.0)
-            await db.execute(
-                "UPDATE search_jobs SET status='completed', completed_at=NOW() WHERE id=$1",
-                job_id,
-            )
+            await mark_done(redis, db, job_id, failed=False)
             return
 
         client = _make_client()
@@ -278,23 +279,18 @@ async def run_search(ctx, job_id: str) -> None:
             if not await robots.allow(search_url):
                 log.info("scraper.search_disallowed", job_id=job_id, url=search_url)
                 await guard.record_spend(tokens=0, cost_usd=0.0)
-                await db.execute(
-                    "UPDATE search_jobs SET status='completed', completed_at=NOW() WHERE id=$1",
-                    job_id,
-                )
+                await mark_done(redis, db, job_id, failed=False)
                 return
 
-            # 4. Fetch search results page.
+            # 4. Fetch search results page — rate-limited per-domain (D-20).
             try:
-                resp = await client.get(search_url)
-                resp.raise_for_status()
+                async with acquire_domain_slot(redis, search_url):
+                    resp = await client.get(search_url)
+                    resp.raise_for_status()
             except httpx.HTTPError as e:
                 log.warning("scraper.fetch_failed", url=search_url, error=str(e))
                 await guard.record_spend(tokens=0, cost_usd=0.0)
-                await db.execute(
-                    "UPDATE search_jobs SET status='completed', completed_at=NOW() WHERE id=$1",
-                    job_id,
-                )
+                await mark_done(redis, db, job_id, failed=False)
                 return
 
             detail_urls = parse_search_results(resp.text)[: settings.scraper_max_listings]
@@ -305,7 +301,9 @@ async def run_search(ctx, job_id: str) -> None:
                 count=len(detail_urls),
             )
 
-            # 5. Fetch + parse each detail page.
+            # 5. Fetch + parse each detail page — rate-limited per-domain (D-20).
+            # check_iter() placement preserved (Pitfall 3); only the inline
+            # jitter sleep is replaced by acquire_domain_slot.
             inserted = 0
             for detail_url in detail_urls:
                 try:
@@ -316,12 +314,10 @@ async def run_search(ctx, job_id: str) -> None:
                 if not await robots.allow(detail_url):
                     continue
 
-                # Jitter 0.5-1.5s (Pitfall 3 — anti-403 throttle).
-                await asyncio.sleep(random.uniform(0.5, 1.5))
-
                 try:
-                    dresp = await client.get(detail_url)
-                    dresp.raise_for_status()
+                    async with acquire_domain_slot(redis, detail_url):
+                        dresp = await client.get(detail_url)
+                        dresp.raise_for_status()
                 except httpx.HTTPError as e:
                     log.warning("scraper.fetch_failed", url=detail_url, error=str(e))
                     continue
@@ -330,8 +326,6 @@ async def run_search(ctx, job_id: str) -> None:
                 serialized = json.dumps(listing_data)
 
                 # Per-payload guard on the extracted JSON, not raw HTML (COST-03).
-                # Raw Craigslist pages are 25-43 KB; the structured listing JSON is
-                # ~300-500 bytes — checking HTML size blocked every listing.
                 try:
                     guard.check_payload(len(serialized.encode()))
                 except BudgetExceeded:
@@ -359,12 +353,13 @@ async def run_search(ctx, job_id: str) -> None:
         finally:
             await client.aclose()
 
-        await db.execute(
-            "UPDATE search_jobs SET status='completed', completed_at=NOW() WHERE id=$1",
-            job_id,
-        )
+        # 7. Terminal success — mark_done owns the status flip (D-15).
+        await mark_done(redis, db, job_id, failed=False)
     except BudgetExceeded:
-        await db.execute(
-            "UPDATE search_jobs SET status='failed' WHERE id=$1", job_id
-        )
+        # D-15: never write status here; mark_done handles partial-vs-full
+        # failure semantics via the Redis failed counter (D-16).
+        await mark_done(redis, db, job_id, failed=True)
+        raise
+    except Exception:
+        await mark_done(redis, db, job_id, failed=True)
         raise
