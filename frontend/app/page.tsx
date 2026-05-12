@@ -5,6 +5,9 @@ import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from '@/lib/supabase';
 import type { Listing, JobStatus, SearchJob, JobResponse, JobPostPayload } from './types';
 import { SearchForm } from './components/SearchForm';
+import { MapView } from './components/MapView';
+import { ListingList } from './components/ListingList';
+import { ListingDrawer } from './components/ListingDrawer';
 
 const LOCALSTORAGE_KEY = 'property_helper_job_id';
 const API_URL = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8000';
@@ -31,6 +34,8 @@ export default function Home() {
   const [listings, setListings] = useState<Listing[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [resumed, setResumed] = useState<boolean>(false);
+  const [hoveredId, setHoveredId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const channelRef = useRef<RealtimeChannel | null>(null);
 
   function subscribe(id: string): RealtimeChannel {
@@ -128,6 +133,8 @@ export default function Home() {
     setError(null);
     setListings([]);
     setResumed(false);
+    setSelectedId(null);
+    setHoveredId(null);
     setStatus('pending');
     try {
       const res = await fetch(`${API_URL}/api/jobs`, {
@@ -193,15 +200,23 @@ export default function Home() {
   }
 
   const showEmpty = !jobId && listings.length === 0 && !error;
-  const showCompletedEmpty =
-    status === 'completed' && listings.length === 0;
+  // Selected listing (drawer source of truth).
+  const selectedListing =
+    selectedId != null
+      ? (listings.find((l) => l.id === selectedId) ?? null)
+      : null;
 
-  // Newest first.
-  const renderedListings = [...listings].reverse();
+  // Map list-related UiStatus to ListingList's typed status.
+  const listStatus: 'idle' | 'pending' | 'running' | 'completed' | 'failed' | 'resuming' =
+    status;
+
+  // Reference safeHostname so an existing helper stays alive for future use
+  // (debug surfaces); component code now uses safeUrl helpers instead.
+  void safeHostname;
 
   return (
     <main className="min-h-screen bg-white">
-      <div className="mx-auto max-w-[720px] px-6 pt-8 pb-12">
+      <div className="mx-auto max-w-[1280px] px-6 pt-8 pb-12">
         <h1 className="text-[20px] font-semibold leading-tight">
           Property Helper
         </h1>
@@ -221,7 +236,7 @@ export default function Home() {
           </div>
         )}
 
-        <div className="mt-6">
+        <div className="mt-6 max-w-[720px]">
           <SearchForm onSubmit={startSearch} inFlight={inFlight} />
         </div>
 
@@ -234,50 +249,26 @@ export default function Home() {
           </div>
         )}
 
-        {showCompletedEmpty && (
-          <div className="mt-6 rounded bg-zinc-100 p-2 text-sm">
-            Search finished with no listings. Check worker logs or try a different query.
+        {jobId && (
+          <div className="mt-6 grid grid-cols-1 md:grid-cols-[3fr_2fr] gap-6 h-[calc(100vh-12rem)]">
+            <div className="md:sticky md:top-4 md:h-[calc(100vh-12rem)]">
+              <MapView
+                listings={listings}
+                hoveredId={hoveredId}
+                selectedId={selectedId}
+                onHover={setHoveredId}
+                onSelect={setSelectedId}
+              />
+            </div>
+            <ListingList
+              listings={listings}
+              hoveredId={hoveredId}
+              selectedId={selectedId}
+              onHover={setHoveredId}
+              onSelect={setSelectedId}
+              status={listStatus}
+            />
           </div>
-        )}
-
-        {listings.length > 0 && (
-          <ul className="mt-6 flex flex-col gap-4" aria-live="polite">
-            {renderedListings.map((l) => (
-              <li key={l.id} className="rounded bg-zinc-100 p-2 text-sm">
-                <div>
-                  <span className="font-semibold">Address</span>: {l.data.address}
-                </div>
-                <div>
-                  <span className="font-semibold">Price</span>: $
-                  {l.data.price?.toLocaleString() ?? '—'}
-                </div>
-                <div>
-                  <span className="font-semibold">Beds</span>: {l.data.beds}
-                </div>
-                <div>
-                  <span className="font-semibold">Baths</span>: {l.data.baths}
-                </div>
-                <div>
-                  <span className="font-semibold">Amenities</span>:{' '}
-                  {l.data.amenities.join(', ')}
-                </div>
-                <div>
-                  <span className="font-semibold">Source</span>:{' '}
-                  <a
-                    href={l.data.source_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="underline"
-                  >
-                    {safeHostname(l.data.source_url)}
-                  </a>
-                </div>
-                <div>
-                  <span className="font-semibold">Posted</span>: {l.data.posted_date}
-                </div>
-              </li>
-            ))}
-          </ul>
         )}
 
         {showEmpty && (
@@ -289,6 +280,11 @@ export default function Home() {
           </div>
         )}
       </div>
+
+      <ListingDrawer
+        listing={selectedListing}
+        onClose={() => setSelectedId(null)}
+      />
     </main>
   );
 }
