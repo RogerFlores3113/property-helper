@@ -14,12 +14,12 @@ from pydantic import ValidationError
 
 def test_settings_requires_anthropic_key(monkeypatch):
     """Importing Settings without ANTHROPIC_API_KEY raises ValidationError."""
+    from app import settings as settings_module  # ensure cached in sys.modules first
+
     # Remove the key from environment so pydantic-settings cannot find it.
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     # Force settings to ignore the on-disk .env file for this test.
     monkeypatch.setenv("PH_DISABLE_ENV_FILE", "1")
-
-    from app import settings as settings_module
 
     # Reload to re-run module-level Settings() construction.
     with pytest.raises(ValidationError) as excinfo:
