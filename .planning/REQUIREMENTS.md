@@ -22,10 +22,10 @@
 
 ### Map & Results
 
-- [ ] **MAP-01**: User sees search results displayed on an interactive map with listing pins showing price labels; pins cluster when zoomed out
-- [ ] **MAP-02**: Hovering a listing card highlights the corresponding pin on the map; hovering a pin highlights the corresponding card in the list
-- [ ] **MAP-03**: Each listing shows: address, price, beds/baths, key amenities, source name, source link, and a "data from X date" freshness label
-- [ ] **MAP-04**: User can click a listing pin or card to expand a detail view with photo preview and direct link to the original listing source
+- [x] **MAP-01**: User sees search results displayed on an interactive map with listing pins showing price labels; pins cluster when zoomed out
+- [x] **MAP-02**: Hovering a listing card highlights the corresponding pin on the map; hovering a pin highlights the corresponding card in the list
+- [x] **MAP-03**: Each listing shows: address, price, beds/baths, key amenities, source name, source link, and a "data from X date" freshness label
+- [x] **MAP-04**: User can click a listing pin or card to expand a detail view with photo preview and direct link to the original listing source
 
 ### Caching & Freshness
 
@@ -129,10 +129,10 @@
 | SRCH-05 | Phase 2 | Pending |
 | SCRAP-02 | Phase 3 | Complete |
 | SCRAP-05 | Phase 3 | Complete |
-| MAP-01 | Phase 3 | Pending |
-| MAP-02 | Phase 3 | Pending |
-| MAP-03 | Phase 3 | Pending |
-| MAP-04 | Phase 3 | Pending |
+| MAP-01 | Phase 3 | Complete |
+| MAP-02 | Phase 3 | Complete |
+| MAP-03 | Phase 3 | Complete |
+| MAP-04 | Phase 3 | Complete |
 | SCRAP-01 | Phase 4 | Pending |
 | SCRAP-03 | Phase 4 | Pending |
 | SCRAP-04 | Phase 4 | Pending |

@@ -4,13 +4,13 @@ milestone: v1.0
 milestone_name: milestone
 current_phase: 03
 status: ready_to_plan
-last_updated: "2026-05-12T01:25:00.000Z"
+last_updated: "2026-05-12T01:17:33.621Z"
 progress:
   total_phases: 8
   completed_phases: 2
   total_plans: 9
-  completed_plans: 7
-  percent: 78
+  completed_plans: 8
+  percent: 89
 ---
 
 # Project State
@@ -28,7 +28,7 @@ See: .planning/PROJECT.md
 |-------|------|--------|
 | 1 | Foundation Skeleton | ✅ Complete |
 | 2 | Search Input & NL Parsing | ⏳ Pending |
-| 3 | First Scraper + Map Results | 🚧 In Progress (Plan 01/3 complete) |
+| 3 | First Scraper + Map Results | 🚧 In Progress (Plan 02/3 complete) |
 | 4 | LLM Extraction & Multi-Source | ⏳ Pending |
 | 5 | Cache, Dedup & Freshness | ⏳ Pending |
 | 6 | Auth | ⏳ Pending |
@@ -51,6 +51,7 @@ Started: 2026-05-10
 - 2026-05-11: Completed Plan 01-03 (code) — frontend/app/page.tsx implements UI-SPEC verbatim with Supabase Realtime dual-channel subscription (listings INSERT + search_jobs UPDATE), localStorage fire-and-forget reattach via GET /api/jobs/{id}, mergeById dedup (Pitfall 1), and useEffect cleanup via removeChannel (Pitfall 7). `npm run build` clean. Task 2 manual end-to-end smoke (all 5 ROADMAP success criteria) is a checkpoint:human-verify awaiting execution.
 - 2026-05-11: Plan 01-03 fully complete — Task 2 manual smoke PASSED with resume signal `phase-1-complete`. All 5 ROADMAP success criteria verified: SC#1 enqueue+running, SC#2 streaming <1s (after pull-on-connect fix), SC#3 fire-and-forget reload (after jsonb parsing fix), SC#4 listings ~315 chars, SC#5 pytest 7 passed + daily_spend row with estimated_tokens=4500. Two post-execution bug fixes committed in 28c5d20 (jobs.py jsonb parsing + page.tsx pull-on-connect race). **Phase 1 complete.**
 - 2026-05-12: Completed Plan 03-01 — replaced stub_scraper with real Craigslist scraper (httpx + selectolax + protego); RobotsCache enforces SCRAP-05 (one-fetch-per-origin, structlog SC#3 audit, fail-open on 5xx); parse_listing extracts lat/lng (D-07, range-validated), price/beds/baths/amenities/posted_date/source_url/source_name; photo URL whitelisted to craigslist.org/craigslistimages.org (T-03-05); SCRAPER_MAX_LISTINGS clamped to ≤30 (T-03-06); CreateJobBody now type-validates Phase 2 chips/global_flex (Pitfall 9, chip persistence deferred to Phase 4). +10 backend tests (17 total). SCRAP-02 + SCRAP-05 marked complete.
+- 2026-05-12: Completed Plan 03-02 — MapView (MapLibre + OpenFreeMap positron) with cluster source + price-pin symbol layer + setFeatureState hover/select sync (`promoteId:'id'`); ListingList with cardRefs Map for D-14 scroll-into-view; React.memo ListingCard with custom comparator (Pitfall 8); slide-out ListingDrawer (Escape/× close); safeUrl.ts host-whitelist helpers (T-03-09/T-03-10) gate every rendered source link and photo URL. page.tsx now uses D-11 side-by-side grid while preserving Realtime subscription verbatim; Pitfall 6 reset (`setSelectedId(null); setHoveredId(null);`) added to startSearch. +4 frontend test files / +18 tests (28 total). MAP-01/02/03/04 marked complete. Bundle +275 kB (maplibre-gl).
 
 ## Decisions Accumulated
 
@@ -68,3 +69,7 @@ Started: 2026-05-10
 - Phase 3 Plan 01: photo URL host whitelist enforced server-side in parse_listing (craigslist.org + craigslistimages.org); non-matching URLs persisted as None (T-03-05 defence in depth).
 - Phase 3 Plan 01: httpx promoted to runtime dependency (scraper imports it directly); previously was dev-only.
 - Phase 3 Plan 01: `chips`/`global_flex` validated at the API boundary (Pydantic ChipModel with Literal type enum) but not yet persisted — Phase 4 will add `query_chips` JSONB column to search_jobs and use chips in the scraper.
+- Phase 3 Plan 02: MapLibre source uses `promoteId:'id'` so `setFeatureState({source, id: listing.id})` targets feature.id directly — without this the hover/select halo silently no-ops.
+- Phase 3 Plan 02: vitest mocks for maplibre-gl must use `vi.hoisted` for shared state and ES class constructors (not `vi.fn(() => instance)`); `new maplibregl.Map(...)` requires a real constructor.
+- Phase 3 Plan 02: `safeUrl.ts` host-whitelist module (`isAllowedCraigslistUrl`, `isAllowedCraigslistImage`, `formatPostedDate`) gates every rendered `<a href>` and `<img src>` — Phase 4 extends with per-source helpers as scrapers are added.
+- Phase 3 Plan 02: ListingDrawer is always mounted in the DOM; closed state slides off-screen with `translate-x-full` + `aria-hidden=true` so AT navigation skips it.
