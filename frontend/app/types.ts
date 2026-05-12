@@ -1,11 +1,14 @@
 export type ListingData = {
-  address: string;
-  price: number;
-  beds: number;
-  baths: number;
+  address: string | null;
+  price: number | null;
+  beds: number | null;
+  baths: number | null;
   amenities: string[];
   source_url: string;
-  posted_date: string;
+  posted_date: string | null;
+  lat: number | null;
+  lng: number | null;
+  source_name: string;
 };
 
 export type Listing = {

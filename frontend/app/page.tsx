@@ -249,7 +249,7 @@ export default function Home() {
                 </div>
                 <div>
                   <span className="font-semibold">Price</span>: $
-                  {l.data.price.toLocaleString()}
+                  {l.data.price?.toLocaleString() ?? '—'}
                 </div>
                 <div>
                   <span className="font-semibold">Beds</span>: {l.data.beds}

@@ -24,6 +24,7 @@ describe('ChipList (SRCH-02, SRCH-04)', () => {
         onUpdate={vi.fn()}
         onRemove={vi.fn()}
         onToggleFlex={vi.fn()}
+        onAdd={vi.fn()}
       />
     );
     await user.click(screen.getByText('2BR'));
@@ -40,6 +41,7 @@ describe('ChipList (SRCH-02, SRCH-04)', () => {
         onUpdate={onUpdate}
         onRemove={vi.fn()}
         onToggleFlex={vi.fn()}
+        onAdd={vi.fn()}
       />
     );
     await user.click(screen.getByText('2BR'));
@@ -62,6 +64,7 @@ describe('ChipList (SRCH-02, SRCH-04)', () => {
         onUpdate={vi.fn()}
         onRemove={vi.fn()}
         onToggleFlex={onToggleFlex}
+        onAdd={vi.fn()}
       />
     );
     await user.click(screen.getByRole('button', { name: /toggle flex/i }));
