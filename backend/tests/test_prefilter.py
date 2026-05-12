@@ -1,15 +1,17 @@
-"""RED scaffold — Plan 04-02 SCRAP-07 HTML prefilter.
+"""Plan 04-02 SCRAP-07 HTML prefilter — GREEN suite.
 
-The prefilter() function trims raw HTML to the listing container before sending
-to the LLM, dramatically reducing token cost. Collection ERRORs until Plan 02
-lands `app.workers.scrapers.prefilter`.
+Asserts the three behaviors required by Plan 04-02 Task 1:
+
+1. Token reduction floor: prefilter compresses to ≤1/5 of raw on the
+   apartments fixture (SCRAP-07).
+2. Empty result when the selector matches nothing.
+3. Script tags inside the listing region are stripped (T-04-01 defence-in-depth).
 """
 from __future__ import annotations
 
 from pathlib import Path
 
-# Import target — does not exist yet.
-from app.workers.scrapers.prefilter import prefilter  # noqa: F401
+from app.workers.scrapers.prefilter import prefilter
 
 FIX = Path(__file__).parent / "fixtures" / "apartments"
 
@@ -30,3 +32,23 @@ def test_prefilter_returns_empty_when_no_match():
     raw = "<html><body><div>no listings here</div></body></html>"
     filtered = prefilter(raw, selector=".placard")
     assert filtered == ""
+
+
+def test_prefilter_strips_scripts_and_nav():
+    """A <script> tag inside the listing region must not survive prefilter output."""
+    raw = (
+        "<html><body>"
+        "<nav>nav junk</nav>"
+        "<div class='placard'>"
+        "<script>alert(1)</script>"
+        "Real listing text: 2BR/1BA $2500/mo at 1 Main St"
+        "</div>"
+        "<footer>footer junk</footer>"
+        "</body></html>"
+    )
+    filtered = prefilter(raw, selector=".placard")
+    assert filtered, "expected listing text to survive prefilter"
+    assert "alert(1)" not in filtered
+    assert "<script" not in filtered.lower()
+    # Listing signal must still be present.
+    assert "2BR" in filtered or "2500" in filtered or "Main St" in filtered
