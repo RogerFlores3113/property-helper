@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import json
 import uuid
+from typing import Literal
 
 from arq.connections import ArqRedis, RedisSettings, create_pool
 from fastapi import APIRouter, HTTPException
@@ -14,10 +15,32 @@ from ..settings import settings
 router = APIRouter(prefix="/api/jobs", tags=["jobs"])
 
 
+class ChipModel(BaseModel):
+    """Phase 2 frontend chip shape — forwarded for Phase 4 use (Pitfall 9).
+
+    Phase 3 ignores chips in the scraper (Craigslist run uses only the query
+    string today), but Pydantic validates them so a malformed chip is rejected
+    at the API boundary with a 422 instead of silently dropped downstream.
+    """
+
+    id: str
+    type: Literal["beds", "max_price", "min_price", "baths", "amenity", "location"]
+    value: int | str
+    flex: bool = False
+
+
 class CreateJobBody(BaseModel):
-    """Validated POST body — rejects anything else with 422 (ASVS V5)."""
+    """Validated POST body — rejects anything else with 422 (ASVS V5).
+
+    Phase 1 query-only payload still works because chips/global_flex have
+    defaults. Phase 4 will persist chips into a dedicated search_jobs column
+    (migration deferred); for now they are accepted at the API boundary and
+    silently ignored by the worker — see Pitfall 9.
+    """
 
     query: str
+    chips: list[ChipModel] = []
+    global_flex: bool = False
 
 
 _arq: ArqRedis | None = None
