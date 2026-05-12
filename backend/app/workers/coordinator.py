@@ -40,6 +40,7 @@ from typing import Any
 import structlog
 
 from .cache import copy_cached_listings
+from .scrapers.dedup import run_dedup_for_job
 
 log = structlog.get_logger()
 
@@ -159,6 +160,24 @@ async def mark_done(
 
     # D-16: partial failure ≠ overall failure.
     terminal = "failed" if failed_n >= expected_n else "completed"
+
+    # D-13 + Pitfall 5: run dedup EXACTLY ONCE — on the terminal='completed'
+    # branch only. The completed counter check above is monotonic, so this
+    # path runs only when the final sub-task crosses the threshold.
+    # Wrapped in try/except so dedup never blocks the status flip
+    # (T-05-16: dedup exception logged but the guarded UPDATE still runs).
+    if terminal == "completed":
+        try:
+            deleted = await run_dedup_for_job(db, job_id)
+            log.info(
+                "coordinator.dedup_complete", job_id=job_id, deleted=deleted
+            )
+        except Exception as exc:
+            log.error(
+                "coordinator.dedup_failed",
+                job_id=job_id,
+                error=str(exc)[:200],
+            )
 
     # Guarded UPDATE — only the first crossing of (completed >= expected)
     # flips status. Subsequent (stale) calls become no-ops.

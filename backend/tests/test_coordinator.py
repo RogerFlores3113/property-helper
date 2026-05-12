@@ -281,7 +281,6 @@ async def test_cache_miss_when_stale(arq_redis, pg_pool, clean_db, monkeypatch):
     )
 
 
-@pytest.mark.red_phase_05
 async def test_dedup_runs_once(arq_redis, pg_pool, clean_db, monkeypatch):
     """run_dedup_for_job is invoked exactly once — on the final mark_done call
     that crosses the completion threshold."""
