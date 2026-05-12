@@ -313,19 +313,21 @@ async def run_search(ctx, job_id: str) -> None:
                     log.warning("scraper.fetch_failed", url=detail_url, error=str(e))
                     continue
 
-                # Per-payload guard (Pitfall 7 / COST-03).
+                listing_data, photo_url = parse_listing(dresp.text, source_url=detail_url)
+                serialized = json.dumps(listing_data)
+
+                # Per-payload guard on the extracted JSON, not raw HTML (COST-03).
+                # Raw Craigslist pages are 25-43 KB; the structured listing JSON is
+                # ~300-500 bytes — checking HTML size blocked every listing.
                 try:
-                    guard.check_payload(len(dresp.content))
+                    guard.check_payload(len(serialized.encode()))
                 except BudgetExceeded:
                     log.warning(
                         "scraper.payload_oversize",
                         url=detail_url,
-                        bytes=len(dresp.content),
+                        bytes=len(serialized.encode()),
                     )
                     continue
-
-                listing_data, photo_url = parse_listing(dresp.text, source_url=detail_url)
-                serialized = json.dumps(listing_data)
                 await db.execute(
                     """INSERT INTO listings (id, job_id, data, photo_url, created_at)
                        VALUES ($1, $2, $3::jsonb, $4, $5)""",
