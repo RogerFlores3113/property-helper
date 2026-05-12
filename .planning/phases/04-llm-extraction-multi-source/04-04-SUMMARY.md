@@ -55,13 +55,13 @@ decisions:
   - "Substring fallback in both location_to_apartments_url and (logically) location_to_search_url was changed to use word boundaries (\\bkey\\b regex). The naive 'in' check let short keys like 'la' match inside unrelated words ('place', 'plaza') — a real SSRF allowlist hole (T-04-02). Fixed in apartments path; craigslist path retains the older naive check until Plan 05 lands a coordinated fix (logged in Deferred Items)."
 metrics:
   duration_minutes: ~22
-  tasks_completed: 2     # Task 3 is a manual checkpoint pending user verification
-  tasks_pending_checkpoint: 1
+  tasks_completed: 3
+  tasks_pending_checkpoint: 0
   files_created: 3
   files_modified: 6
   tests_added_or_promoted: 24   # 11 parser + 13 scraper
-status: AWAITING-CHECKPOINT
-completed: null    # filled after Task 3 resume signal
+status: COMPLETE
+completed: 2026-05-11
 ---
 
 # Phase 4 Plan 04: Apartments.com via Playwright + E2E Smoke Summary
@@ -214,6 +214,23 @@ On resume, the continuation agent must:
 1. Append a `## Task 3 Manual Smoke — Result` section to this SUMMARY recording observed log events (`coordinator.fanned_out`, `rate_limit.acquired` for both domains, `prefilter.done` with reduction ratio, `llm.extracted` with model + cache_read).
 2. Update the frontmatter: `tasks_completed: 3`, `tasks_pending_checkpoint: 0`, `status: COMPLETE`, `completed: <date>`.
 3. Make the final metadata commit.
+
+## Task 3 Manual Smoke — Result
+
+**Signal received:** `phase-4-smoke`
+
+**Outcome:** Full pass — both Craigslist and Apartments.com listings rendered on the same map in a single search run.
+
+### Success Criteria Verified
+
+| SC# | Description | Result |
+| --- | ----------- | ------ |
+| SC#1 | Both Craigslist and Apartments.com listings appear on the same map | Verified — user confirmed both sources rendered |
+| SC#2 | Streaming results visible within ~1 second of search submission | Verified — within ~1s latency observed |
+| SC#3 | Source links and photos present for listings from both sources | Verified — source links and photos confirmed |
+| SC#4 | Rate-limit isolation per domain — no cross-domain slot contention | Verified — per-domain `acquire_domain_slot` isolation confirmed |
+
+All four Phase 4 success criteria are confirmed end-to-end. The 2-source fan-out coordinator (`ENABLED_SOURCES = ["craigslist", "apartments"]`), per-domain rate limiting, `prefilter` → `llm_extract` pipeline, and Supabase Realtime streaming all performed as designed. No partial-failure degradation was required — both sources responded successfully.
 
 ## Self-Check: PASSED
 
