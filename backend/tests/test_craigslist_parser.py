@@ -66,7 +66,6 @@ def test_lat_lng_range_validation():
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.red_phase_05
 def test_sqft_persisted_to_data():
     """Pitfall 8 (05-RESEARCH): parse_listing must surface `sqft` (int) when the
     HTML has the ft² attribute group, or omit / set to None when absent.

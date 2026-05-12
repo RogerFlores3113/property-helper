@@ -15,9 +15,6 @@ import json
 import uuid
 from datetime import datetime, timedelta, timezone
 
-import pytest
-
-pytestmark = pytest.mark.red_phase_05
 
 
 async def _insert_job(pg_pool, job_id: str) -> None:

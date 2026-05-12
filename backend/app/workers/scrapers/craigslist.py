@@ -26,6 +26,7 @@ from ...guards.budget import BudgetExceeded, BudgetGuard
 from ...settings import settings
 from ..coordinator import mark_done
 from ..rate_limit import acquire_domain_slot
+from .dedup import compute_dedup_key
 from .location import location_to_search_url
 from .robots import USER_AGENT, RobotsCache
 
@@ -118,11 +119,15 @@ def _parse_attrgroup(tree: HTMLParser) -> tuple[int | None, float | None, int | 
                     baths = float(mba.group(1))
                 except ValueError:
                     pass
-        if sqft is None and text.lower().endswith("ft2"):
-            digits = re.sub(r"[^\d]", "", text)
-            if digits:
+        if sqft is None:
+            # Match "<digits>ft2" or "<digits> ft²" (selectolax flattens
+            # `<b>850</b>ft<sup>2</sup>` to the string "850ft2"). We extract
+            # the leading digit run BEFORE "ft" so a `<sup>2</sup>` literal
+            # does not pollute the integer.
+            ms = re.search(r"(\d+)\s*ft(?:[²]|2)?\b", text, re.IGNORECASE)
+            if ms:
                 try:
-                    sqft = int(digits)
+                    sqft = int(ms.group(1))
                 except ValueError:
                     pass
     return beds, baths, sqft
@@ -170,8 +175,9 @@ def parse_listing(html: str, source_url: str) -> tuple[dict, str | None]:
     price_node = tree.css_first(".price")
     price = _parse_price(price_node.text() if price_node else None)
 
-    # Beds / baths / sqft
-    beds, baths, _sqft = _parse_attrgroup(tree)
+    # Beds / baths / sqft (Pitfall 8 — sqft persisted to data so dedup_key
+    # can bucket by 100 ft² bands).
+    beds, baths, sqft = _parse_attrgroup(tree)
 
     # Posted date — <time datetime="...">
     time_node = tree.css_first("time.timeago, time[datetime]")
@@ -227,6 +233,7 @@ def parse_listing(html: str, source_url: str) -> tuple[dict, str | None]:
         "price": price,
         "beds": beds,
         "baths": baths,
+        "sqft": sqft,
         "amenities": amenities,
         "source_url": source_url,
         "source_name": "craigslist",
@@ -335,14 +342,20 @@ async def run_search_craigslist(ctx, job_id: str) -> None:
                         bytes=len(serialized.encode()),
                     )
                     continue
+                dedup_key = compute_dedup_key(
+                    listing_data.get("address"),
+                    listing_data.get("beds"),
+                    listing_data.get("sqft"),
+                )
                 await db.execute(
-                    """INSERT INTO listings (id, job_id, data, photo_url, created_at)
-                       VALUES ($1, $2, $3::jsonb, $4, $5)""",
+                    """INSERT INTO listings (id, job_id, data, photo_url, created_at, dedup_key)
+                       VALUES ($1, $2, $3::jsonb, $4, $5, $6)""",
                     str(uuid.uuid4()),
                     job_id,
                     serialized,
                     photo_url,
                     datetime.now(timezone.utc),
+                    dedup_key,
                 )
                 inserted += 1
 
