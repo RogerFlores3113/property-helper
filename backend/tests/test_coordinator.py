@@ -187,7 +187,6 @@ async def test_status_not_double_flipped(arq_redis, pg_pool, clean_db):
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.red_phase_05
 async def test_cache_hit_copies_listings(arq_redis, pg_pool, clean_db, monkeypatch):
     """A prior completed job with matching filter_hash and fresh listings
     (expires_at > now()) is reused: rows copied to the new job_id, status flips
@@ -241,7 +240,6 @@ async def test_cache_hit_copies_listings(arq_redis, pg_pool, clean_db, monkeypat
         )
 
 
-@pytest.mark.red_phase_05
 async def test_cache_miss_when_stale(arq_redis, pg_pool, clean_db, monkeypatch):
     """Prior job exists with matching filter_hash but all listings are stale
     (expires_at <= now()) → coordinator proceeds with normal fan-out."""

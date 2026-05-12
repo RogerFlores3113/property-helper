@@ -39,6 +39,8 @@ from typing import Any
 
 import structlog
 
+from .cache import copy_cached_listings
+
 log = structlog.get_logger()
 
 # Module-level list — Plan 04-04 appended "apartments". Keep it a list, not a
@@ -72,6 +74,33 @@ async def run_search_coordinator(ctx: dict, job_id: str) -> None:
     """
     db = ctx["db"]
     redis = ctx["redis"]
+
+    # Cache-hit fast-path (CACH-01 / D-04+D-05). Read the filter_hash that
+    # POST /api/jobs persisted; if any prior job with the same hash has at
+    # least one fresh listing, copy those rows and short-circuit to
+    # 'completed'. Pitfall 6 (a): do NOT call mark_done and do NOT prime
+    # the counter keys — there are no sub-tasks to wait on.
+    job_row = await db.fetchrow(
+        "SELECT filter_hash FROM search_jobs WHERE id=$1", job_id
+    )
+    filter_hash = job_row["filter_hash"] if job_row else None
+    if filter_hash is not None:
+        copied = await copy_cached_listings(db, job_id, filter_hash)
+        if copied > 0:
+            # WHERE status='pending' guard prevents racing an already-running
+            # job (cannot happen today but cheap defence-in-depth).
+            await db.execute(
+                "UPDATE search_jobs SET status='completed', completed_at=NOW() "
+                "WHERE id=$1 AND status='pending'",
+                job_id,
+            )
+            log.info(
+                "coordinator.cache_hit",
+                job_id=job_id,
+                filter_hash=filter_hash,
+                copied=copied,
+            )
+            return
 
     await db.execute(
         "UPDATE search_jobs SET status='running' WHERE id=$1", job_id
