@@ -12,7 +12,12 @@ Non-technical users say what they want once in natural language, and get consoli
 
 ### Validated
 
-(None yet — ship to validate)
+**Scraping & Results** — Validated in Phase 3: first-scraper-map-results
+- [x] robots.txt compliance on every target domain (SCRAP-05 — Craigslist robots.txt fetched, cached in Redis, logged)
+- [x] Traditional HTML scraping for smaller property management sites (SCRAP-02 — Craigslist scraper live, httpx + selectolax)
+- [x] Each result shows: address, price, beds/baths, key amenities, source link, preview image, timestamp (MAP-01–MAP-04 — ListingCard + ListingDrawer verified live)
+- [x] Interactive map with each listing pinned (MAP-01 — MapLibre + OpenFreeMap tiles, clustered priced pins verified)
+- [x] Results stream to UI in real-time via Supabase Realtime (MAP-02 — end-to-end Realtime subscription verified live)
 
 ### Active
 
@@ -114,4 +119,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-10 after initialization*
+*Last updated: 2026-05-11 after Phase 3 completion*
