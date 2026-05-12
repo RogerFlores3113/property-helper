@@ -19,6 +19,13 @@ Non-technical users say what they want once in natural language, and get consoli
 - [x] Interactive map with each listing pinned (MAP-01 — MapLibre + OpenFreeMap tiles, clustered priced pins verified)
 - [x] Results stream to UI in real-time via Supabase Realtime (MAP-02 — end-to-end Realtime subscription verified live)
 
+**LLM Extraction & Multi-Source** — Validated in Phase 4: llm-extraction-multi-source
+- [x] LLM (Claude Haiku 4.5) extracts structured listings from pre-filtered HTML via forced tool-use (SCRAP-06 — llm_extract.py; prompt caching enabled)
+- [x] Aggressively pre-filter HTML before sending to LLM (SCRAP-07 — prefilter.py; selectolax + trafilatura, ≥5× compression verified)
+- [x] Playwright browser automation for Apartments.com with stealth (SCRAP-01 — playwright-stealth applied before navigation; smoke-tested live)
+- [x] Rate limiting: max 1 req/sec per domain with 0.1–0.5s jitter, coordinated across parallel sessions (SCRAP-04 — Redis SET NX PX per-domain; acquire_domain_slot used by both scrapers)
+- [x] Parallel browser sessions via ARQ fan-out coordinator (SCRAP-03 — run_search_coordinator; ENABLED_SOURCES=["craigslist","apartments"])
+
 ### Active
 
 **Search & Input**
@@ -119,4 +126,4 @@ This document evolves at phase transitions and milestone boundaries.
 4. Update Context with current state
 
 ---
-*Last updated: 2026-05-11 after Phase 3 completion*
+*Last updated: 2026-05-12 after Phase 4 completion*
