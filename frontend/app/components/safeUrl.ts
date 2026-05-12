@@ -22,12 +22,31 @@ export function isAllowedCraigslistImage(url: string): boolean {
     const u = new URL(url);
     const host = u.hostname;
     if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    // D-22 / T-04-03 (CR-02): exact apex match plus dotted-suffix only.
+    // The previous bare-suffix check accepted `evilcraigslistimages.org`;
+    // replaced with apex equality + dotted-suffix for explicit boundaries.
     return (
       host === 'craigslist.org' ||
       host.endsWith('.craigslist.org') ||
-      host.endsWith('craigslistimages.org') ||
-      host.endsWith('craigslistimages')
+      host === 'craigslistimages.org' ||
+      host.endsWith('.craigslistimages.org')
     );
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * D-23 / T-04-03 — mirror of isAllowedCraigslistUrl for Apartments.com.
+ * Accepts apex `apartments.com` and `*.apartments.com` subdomains only;
+ * rejects fooled-suffix hosts like `evilapartments.com` and non-http(s) URIs.
+ */
+export function isAllowedApartmentsUrl(url: string): boolean {
+  try {
+    const u = new URL(url);
+    const host = u.hostname;
+    if (u.protocol !== 'https:' && u.protocol !== 'http:') return false;
+    return host === 'apartments.com' || host.endsWith('.apartments.com');
   } catch {
     return false;
   }
