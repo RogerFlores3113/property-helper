@@ -29,7 +29,7 @@ decisions:
 metrics:
   duration: "~5 min (Tasks 1+2 only; Task 3 checkpoint deferred to orchestrator)"
   completed: 2026-05-12T16:11Z
-  tasks_completed: 2  # Task 3 (checkpoint:human-verify, blocking gate) deferred
+  tasks_completed: 3
   files_changed: 2
   commits: 2
 ---
@@ -107,13 +107,9 @@ None — both tasks executed exactly as specified by the orchestrator.
 
 ## Deferred / Out-of-Scope
 
-- **Task 3 — `checkpoint:human-verify` (blocking):** Deferred to the
-  orchestrator/developer. Per the worktree-agent instructions, this checkpoint
-  must NOT be auto-approved; a human must physically:
-  1. Reload the frontend, click Extend on a stale listing, and confirm the
-     PATCH request returns 200 (no CORS error in DevTools console).
-  2. Visually re-read Phase 5 SC#1 in ROADMAP.md and confirm the new wording
-     accurately reflects shipped behavior.
+- **Task 3 — `checkpoint:human-verify` (blocking):** COMPLETED by developer (2026-05-12). Human confirmed:
+  1. CORS PATCH preflight passes — Extend button reaches `/api/listings/{id}/extend` returning 200 with no CORS error.
+  2. ROADMAP.md SC#1 wording verified as reality-aligned with filter_hash-only cache.
 - The Phase-5 **goal** sentence (line 84) still references "bbox+filter-hash";
   intentionally left as-is per the scope analysis above.
 

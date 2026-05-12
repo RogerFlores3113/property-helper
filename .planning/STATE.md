@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 05
-status: executing
+status: ready_to_plan
 stopped_at: Plan 05-03 complete — SCRAP-08 dedup + CACH-02 TTL extend landed; dedup.py + listings.py + scraper INSERTs + mark_done hook GREEN
 last_updated: "2026-05-12T16:09:45.600Z"
 progress:
   total_phases: 8
-  completed_phases: 4
+  completed_phases: 5
   total_plans: 18
   completed_plans: 17
-  percent: 94
+  percent: 63
 ---
 
 # Project State
@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Non-technical users say what they want once in natural language and get consolidated, map-visualized apartment results without being asked anything else.
-**Current phase:** 05
+**Current phase:** 6
 
 ## Phase Status
 
@@ -40,7 +40,7 @@ See: .planning/PROJECT.md
 
 **Phase 5: Cache, Dedup & Freshness**
 Goal: Add listing deduplication, shared global cache, and TTL-based freshness management so repeated searches return instant cached results and stale listings are flagged.
-Status: Executing Phase 05
+Status: Ready to plan
 
 ## Log
 
