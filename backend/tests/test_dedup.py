@@ -15,14 +15,10 @@ from __future__ import annotations
 import json
 import uuid
 
-import pytest
-
-from app.workers.scrapers.dedup import (  # noqa: F401 — RED import
+from app.workers.scrapers.dedup import (
     compute_dedup_key,
     run_dedup_for_job,
 )
-
-pytestmark = pytest.mark.red_phase_05
 
 
 def test_compute_dedup_key_formula():
