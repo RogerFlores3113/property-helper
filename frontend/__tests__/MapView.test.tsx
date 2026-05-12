@@ -3,38 +3,49 @@ import { render } from '@testing-library/react';
 import type { Listing } from '../app/types';
 
 // Shared mock map instance — methods are vi.fn() spies tests inspect by call args.
-const mapMock = {
-  addSource: vi.fn(),
-  addLayer: vi.fn(),
-  getSource: vi.fn(() => ({ setData: vi.fn(), getClusterExpansionZoom: vi.fn() })),
-  setFeatureState: vi.fn(),
-  setData: vi.fn(),
-  remove: vi.fn(),
-  easeTo: vi.fn(),
-  once: vi.fn(),
-  on: vi.fn(),
-  isStyleLoaded: vi.fn(() => true),
-  fitBounds: vi.fn(),
-  getCanvas: vi.fn(() => ({ style: { cursor: '' } })),
-};
+// Hoisted so vi.mock factory can reference them (vi.mock is hoisted above imports).
+const { mapMock, MockMap, MockLngLatBounds } = vi.hoisted(() => {
+  const m = {
+    addSource: vi.fn(),
+    addLayer: vi.fn(),
+    getSource: vi.fn(() => ({ setData: vi.fn(), getClusterExpansionZoom: vi.fn(async () => 14) })),
+    setFeatureState: vi.fn(),
+    setData: vi.fn(),
+    remove: vi.fn(),
+    easeTo: vi.fn(),
+    once: vi.fn(),
+    on: vi.fn(),
+    isStyleLoaded: vi.fn(() => true),
+    fitBounds: vi.fn(),
+    getCanvas: vi.fn(() => ({ style: { cursor: '' } })),
+  };
+  class Map {
+    addSource = m.addSource;
+    addLayer = m.addLayer;
+    getSource = m.getSource;
+    setFeatureState = m.setFeatureState;
+    remove = m.remove;
+    easeTo = m.easeTo;
+    once = m.once;
+    on = m.on;
+    isStyleLoaded = m.isStyleLoaded;
+    fitBounds = m.fitBounds;
+    getCanvas = m.getCanvas;
+  }
+  class LngLatBounds {
+    extend = vi.fn(() => this);
+  }
+  return { mapMock: m, MockMap: Map, MockLngLatBounds: LngLatBounds };
+});
 
 // Reset the source's setData on each test so we can assert call args.
 let sourceSetData: ReturnType<typeof vi.fn>;
 
 vi.mock('maplibre-gl', () => {
   return {
-    default: {
-      Map: vi.fn(() => mapMock),
-      LngLatBounds: vi.fn(function (this: { extend: (c: unknown) => unknown }) {
-        this.extend = vi.fn(() => this);
-        return this;
-      }),
-    },
-    Map: vi.fn(() => mapMock),
-    LngLatBounds: vi.fn(function (this: { extend: (c: unknown) => unknown }) {
-      this.extend = vi.fn(() => this);
-      return this;
-    }),
+    default: { Map: MockMap, LngLatBounds: MockLngLatBounds },
+    Map: MockMap,
+    LngLatBounds: MockLngLatBounds,
   };
 });
 
