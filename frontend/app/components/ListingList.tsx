@@ -11,6 +11,8 @@ type Props = {
   onHover: (id: string | null) => void;
   onSelect: (id: string) => void;
   status: 'idle' | 'pending' | 'running' | 'completed' | 'failed' | 'resuming';
+  onExtend?: (id: string) => void | Promise<void>;
+  onResearch?: (id: string) => void | Promise<void>;
 };
 
 export function ListingList({
@@ -20,6 +22,8 @@ export function ListingList({
   onHover,
   onSelect,
   status,
+  onExtend,
+  onResearch,
 }: Props) {
   const cardRefs = useRef<Map<string, HTMLLIElement>>(new Map());
 
@@ -73,6 +77,8 @@ export function ListingList({
             onHover={onHover}
             onSelect={onSelect}
             registerRef={registerRef}
+            onExtend={onExtend}
+            onResearch={onResearch}
           />
         ))}
       </ul>

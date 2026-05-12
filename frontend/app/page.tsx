@@ -30,6 +30,7 @@ function mergeById(prev: Listing[], next: Listing[]): Listing[] {
 
 export default function Home() {
   const [jobId, setJobId] = useState<string | null>(null);
+  const [currentJob, setCurrentJob] = useState<SearchJob | null>(null);
   const [status, setStatus] = useState<UiStatus>('idle');
   const [listings, setListings] = useState<Listing[]>([]);
   const [error, setError] = useState<string | null>(null);
@@ -101,6 +102,7 @@ export default function Home() {
       const body = (await res.json()) as JobResponse;
       if (body.job) {
         setStatus(body.job.status);
+        setCurrentJob(body.job);
       }
       setListings(body.listings ?? []);
       // Subscribe AFTER GET so initial state seeds first, then dedupe via mergeById.
@@ -129,9 +131,66 @@ export default function Home() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
+  // CACH-02: PATCH /api/listings/{id}/extend; on 200 splice new expires_at
+  // into local state via the same mergeById/replace pattern used elsewhere.
+  async function handleExtend(listingId: string): Promise<void> {
+    try {
+      const res = await fetch(`${API_URL}/api/listings/${listingId}/extend`, {
+        method: 'PATCH',
+      });
+      if (!res.ok) {
+        console.error('extend failed', res.status);
+        return;
+      }
+      const body = (await res.json()) as { id: string; expires_at: string };
+      setListings((prev) =>
+        prev.map((l) =>
+          l.id === body.id ? { ...l, expires_at: body.expires_at } : l
+        )
+      );
+    } catch (err) {
+      console.error('extend error', err);
+    }
+  }
+
+  // SCRAP-08 / CACH-01: POST /api/jobs again with the original chips so the
+  // cache-hit fast-path may serve a fresh copy. If chips weren't persisted
+  // (older Phase-4 job), prompt the user to re-enter the query.
+  async function handleResearch(_listingId: string): Promise<void> {
+    if (!currentJob || !currentJob.chips || currentJob.chips.length === 0) {
+      window.alert(
+        'This search predates Phase 5 — please re-enter your query in the search box above.'
+      );
+      return;
+    }
+    try {
+      const res = await fetch(`${API_URL}/api/jobs`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          query: currentJob.query,
+          chips: currentJob.chips,
+          global_flex: false,
+        }),
+      });
+      if (!res.ok) {
+        console.error('re-search failed', res.status);
+        return;
+      }
+      const body = (await res.json()) as { job_id: string; status: JobStatus };
+      localStorage.setItem(LOCALSTORAGE_KEY, body.job_id);
+      // Reload the page so reattach() pulls the new job cleanly (mirrors the
+      // fire-and-forget pattern; Phase 7 dashboard will replace this).
+      window.location.reload();
+    } catch (err) {
+      console.error('re-search error', err);
+    }
+  }
+
   async function startSearch(payload: JobPostPayload) {
     setError(null);
     setListings([]);
+    setCurrentJob(null);
     setResumed(false);
     setSelectedId(null);
     setHoveredId(null);
@@ -167,6 +226,7 @@ export default function Home() {
           const cb = (await catchup.json()) as JobResponse;
           if (cb.listings?.length) setListings((prev) => mergeById(prev, cb.listings));
           if (cb.job?.status) setStatus(cb.job.status);
+          if (cb.job) setCurrentJob(cb.job);
         }
       } catch { /* non-fatal — Realtime will fill in any gaps */ }
     } catch {
@@ -268,6 +328,8 @@ export default function Home() {
                 onHover={setHoveredId}
                 onSelect={setSelectedId}
                 status={listStatus}
+                onExtend={handleExtend}
+                onResearch={handleResearch}
               />
             </div>
           </div>
