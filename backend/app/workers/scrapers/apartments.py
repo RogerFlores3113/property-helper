@@ -44,6 +44,7 @@ from ...settings import settings
 from ..coordinator import mark_done
 from ..rate_limit import acquire_domain_slot
 from . import llm_extract
+from .dedup import compute_dedup_key
 from .location import location_to_apartments_url
 from .prefilter import prefilter
 from .robots import USER_AGENT
@@ -244,14 +245,20 @@ async def run_search_apartments(ctx, job_id: str) -> None:
                                     photo_url = image_url
 
                             serialized = json.dumps(data, default=str)
+                            dedup_key = compute_dedup_key(
+                                data.get("address"),
+                                data.get("beds"),
+                                data.get("sqft"),
+                            )
                             await db.execute(
-                                """INSERT INTO listings (id, job_id, data, photo_url, created_at)
-                                   VALUES ($1, $2, $3::jsonb, $4, $5)""",
+                                """INSERT INTO listings (id, job_id, data, photo_url, created_at, dedup_key)
+                                   VALUES ($1, $2, $3::jsonb, $4, $5, $6)""",
                                 str(uuid.uuid4()),
                                 job_id,
                                 serialized,
                                 photo_url,
                                 datetime.now(timezone.utc),
+                                dedup_key,
                             )
                             inserted += 1
                 finally:
