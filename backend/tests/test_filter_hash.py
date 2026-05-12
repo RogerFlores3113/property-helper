@@ -14,11 +14,7 @@ from __future__ import annotations
 
 import re
 
-import pytest
-
-from app.workers.cache import compute_filter_hash  # noqa: F401 — RED import
-
-pytestmark = pytest.mark.red_phase_05
+from app.workers.cache import compute_filter_hash
 
 
 def test_compute_filter_hash_deterministic_across_chip_order():
