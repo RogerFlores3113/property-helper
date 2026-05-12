@@ -131,6 +131,95 @@ async def test_query_max_length(clean_db, pg_pool, monkeypatch):
         assert too_long.status_code == 422
 
 
+# ---------------------------------------------------------------------------
+# Phase 5 RED additions — filter_hash + chips persistence, expires_at exposure
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.red_phase_05
+async def test_create_job_persists_filter_hash_and_chips(
+    clean_db, pg_pool, monkeypatch
+):
+    """POST /api/jobs with chips → DB row has non-NULL filter_hash (64-char hex)
+    and chips JSONB equal to the posted chips."""
+    monkeypatch.setattr(db_module, "_pool", pg_pool)
+    stub = _StubArq()
+
+    async def fake_arq():
+        return stub
+
+    monkeypatch.setattr(jobs_route, "arq", fake_arq)
+
+    chips = [
+        {"id": "1", "type": "beds", "value": 2, "flex": False},
+        {"id": "2", "type": "max_price", "value": 5000, "flex": False},
+    ]
+    transport = httpx.ASGITransport(app=main_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/jobs", json={"query": "2br sfbay", "chips": chips}
+        )
+        assert resp.status_code == 200, resp.text
+        job_id = resp.json()["job_id"]
+
+    row = await pg_pool.fetchrow(
+        "SELECT filter_hash, chips FROM search_jobs WHERE id = $1", job_id
+    )
+    import re as _re
+
+    assert row["filter_hash"] is not None
+    assert _re.match(r"^[0-9a-f]{64}$", row["filter_hash"]), (
+        f"filter_hash must be sha256 hex, got {row['filter_hash']!r}"
+    )
+    stored = row["chips"]
+    if isinstance(stored, str):
+        stored = json.loads(stored)
+    assert stored is not None
+    # Compare as set-of-tuples since chip ordering may be canonicalized server-side.
+    posted = {(c["type"], c["value"]) for c in chips}
+    got = {(c["type"], c["value"]) for c in stored}
+    assert got == posted
+
+
+@pytest.mark.red_phase_05
+async def test_get_job_exposes_expires_at_and_chips(clean_db, pg_pool, monkeypatch):
+    """GET /api/jobs/{id} listings include `expires_at` ISO string; job
+    payload includes `chips`."""
+    monkeypatch.setattr(db_module, "_pool", pg_pool)
+    stub = _StubArq()
+
+    async def fake_arq():
+        return stub
+
+    monkeypatch.setattr(jobs_route, "arq", fake_arq)
+
+    chips = [{"id": "1", "type": "beds", "value": 2, "flex": False}]
+    transport = httpx.ASGITransport(app=main_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        resp = await client.post(
+            "/api/jobs", json={"query": "q", "chips": chips}
+        )
+        job_id = resp.json()["job_id"]
+
+        await pg_pool.execute(
+            """INSERT INTO listings (id, job_id, data)
+               VALUES (gen_random_uuid(), $1, $2::jsonb)""",
+            job_id,
+            json.dumps({"address": "x"}),
+        )
+
+        got = await client.get(f"/api/jobs/{job_id}")
+        assert got.status_code == 200
+        body = got.json()
+        assert body["job"].get("chips") is not None
+        assert len(body["listings"]) == 1
+        assert body["listings"][0].get("expires_at") is not None
+        # ISO-8601 format check (round-trippable).
+        from datetime import datetime as _dt
+
+        _dt.fromisoformat(body["listings"][0]["expires_at"])
+
+
 async def test_query_min_length(clean_db, pg_pool, monkeypatch):
     """CR-01 — empty query rejected with 422."""
     monkeypatch.setattr(db_module, "_pool", pg_pool)

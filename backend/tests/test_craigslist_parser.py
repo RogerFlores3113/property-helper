@@ -4,6 +4,8 @@ from __future__ import annotations
 import re
 from pathlib import Path
 
+import pytest
+
 from app.workers.scrapers.craigslist import parse_listing, parse_search_results
 
 FIX = Path(__file__).parent / "fixtures"
@@ -57,3 +59,41 @@ def test_lat_lng_range_validation():
     data, _ = parse_listing(bad_html, source_url="https://x.craigslist.org/x.html")
     assert data["lat"] is None
     assert data["lng"] is None
+
+
+# ---------------------------------------------------------------------------
+# Phase 5 RED addition — Pitfall 8: persist sqft so dedup_key can use it
+# ---------------------------------------------------------------------------
+
+
+@pytest.mark.red_phase_05
+def test_sqft_persisted_to_data():
+    """Pitfall 8 (05-RESEARCH): parse_listing must surface `sqft` (int) when the
+    HTML has the ft² attribute group, or omit / set to None when absent.
+
+    Plan 05-03 will add this extraction so compute_dedup_key has a sqft value
+    to round into the dedup key.
+    """
+    # Craigslist detail pages embed sqft in a span with class 'shared-line-bubble'
+    # whose data-rdf is 'http://schema.org/floorSize' (per 05-RESEARCH Pitfall 8).
+    with_sqft = """<html><body>
+    <p class="attrgroup">
+      <span class="shared-line-bubble" data-rdf="http://schema.org/floorSize">
+        <b>850</b>ft<sup>2</sup>
+      </span>
+    </p>
+    </body></html>"""
+    data, _ = parse_listing(
+        with_sqft, source_url="https://sfbay.craigslist.org/x.html"
+    )
+    assert data.get("sqft") == 850, (
+        f"sqft must be parsed as int 850, got {data.get('sqft')!r}"
+    )
+
+    without_sqft = """<html><body><p>No bubble here.</p></body></html>"""
+    data2, _ = parse_listing(
+        without_sqft, source_url="https://sfbay.craigslist.org/y.html"
+    )
+    assert data2.get("sqft") in (None, 0) or "sqft" not in data2, (
+        f"sqft must be None/absent when missing, got {data2.get('sqft')!r}"
+    )
