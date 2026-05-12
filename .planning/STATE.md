@@ -20,15 +20,15 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Non-technical users say what they want once in natural language and get consolidated, map-visualized apartment results without being asked anything else.
-**Current phase:** 4
+**Current phase:** 4 — LLM Extraction & Multi-Source
 
 ## Phase Status
 
 | Phase | Name | Status |
 |-------|------|--------|
 | 1 | Foundation Skeleton | ✅ Complete |
-| 2 | Search Input & NL Parsing | ⏳ Pending |
-| 3 | First Scraper + Map Results | 🚧 In Progress (Plan 02/3 complete) |
+| 2 | Search Input & NL Parsing | ✅ Complete |
+| 3 | First Scraper + Map Results | ✅ Complete |
 | 4 | LLM Extraction & Multi-Source | ⏳ Pending |
 | 5 | Cache, Dedup & Freshness | ⏳ Pending |
 | 6 | Auth | ⏳ Pending |
@@ -37,9 +37,9 @@ See: .planning/PROJECT.md
 
 ## Active Phase
 
-**Phase 1: Foundation Skeleton**
-Goal: End-to-end infra (Next.js + FastAPI + Supabase + Redis + ARQ + Realtime) with cost guardrails wired and fake data flowing from worker to UI.
-Started: 2026-05-10
+**Phase 4: LLM Extraction & Multi-Source**
+Goal: Introduce Claude Haiku 4.5 as the structured extractor over pre-filtered HTML, add Playwright (with stealth) for Apartments.com, and fan out parallel scraper sessions per search under Redis-coordinated rate limits.
+Status: Ready to plan
 
 ## Log
 
@@ -79,3 +79,14 @@ Started: 2026-05-10
 | # | Description | Date | Commit | Directory |
 |---|-------------|------|--------|-----------|
 | 260511-pvo | fix scraper payload guard — check_payload on raw HTML (25-43KB) vs 8KB limit | 2026-05-12 | ae87cb1 | [260511-pvo-fix-scraper-payload-guard-check-payload-](./quick/260511-pvo-fix-scraper-payload-guard-check-payload-/) |
+
+## Session Continuity
+
+Last session: 2026-05-11
+Stopped at: Phase 3 complete (SC#1–SC#4 verified); ready to plan Phase 4 — LLM Extraction & Multi-Source
+Resume file: None
+
+## Blockers / Concerns
+
+- ⚠ Code review CR-01: `CreateJobBody.query` has no `max_length` — add `Field(..., min_length=1, max_length=512)` in Phase 4 or as a quick fix before Phase 4 planning.
+- ⚠ Code review CR-02: `safeUrl.ts` bare-suffix check `endsWith('craigslistimages')` is too broad — fix before Phase 4 adds more source helpers.
