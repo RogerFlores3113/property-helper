@@ -3,15 +3,15 @@ gsd_state_version: 1.0
 milestone: v1.0
 milestone_name: milestone
 current_phase: 05
-status: ready_to_plan
-stopped_at: Phase 4 complete — ready to plan Phase 5
-last_updated: "2026-05-12T06:40:00.000Z"
+status: executing
+stopped_at: Phase 5 planned — 4 plans ready to execute
+last_updated: "2026-05-12T07:26:26.353Z"
 progress:
   total_phases: 8
   completed_phases: 4
-  total_plans: 13
-  completed_plans: 13
-  percent: 50
+  total_plans: 17
+  completed_plans: 14
+  percent: 82
 ---
 
 # Project State
@@ -21,7 +21,7 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Non-technical users say what they want once in natural language and get consolidated, map-visualized apartment results without being asked anything else.
-**Current phase:** 5
+**Current phase:** 05
 
 ## Phase Status
 
@@ -40,7 +40,7 @@ See: .planning/PROJECT.md
 
 **Phase 5: Cache, Dedup & Freshness**
 Goal: Add listing deduplication, shared global cache, and TTL-based freshness management so repeated searches return instant cached results and stale listings are flagged.
-Status: Ready to plan
+Status: Executing Phase 05
 
 ## Log
 
@@ -53,6 +53,7 @@ Status: Ready to plan
 - 2026-05-11: Plan 01-03 fully complete — Task 2 manual smoke PASSED with resume signal `phase-1-complete`. All 5 ROADMAP success criteria verified: SC#1 enqueue+running, SC#2 streaming <1s (after pull-on-connect fix), SC#3 fire-and-forget reload (after jsonb parsing fix), SC#4 listings ~315 chars, SC#5 pytest 7 passed + daily_spend row with estimated_tokens=4500. Two post-execution bug fixes committed in 28c5d20 (jobs.py jsonb parsing + page.tsx pull-on-connect race). **Phase 1 complete.**
 - 2026-05-12: Completed Plan 03-01 — replaced stub_scraper with real Craigslist scraper (httpx + selectolax + protego); RobotsCache enforces SCRAP-05 (one-fetch-per-origin, structlog SC#3 audit, fail-open on 5xx); parse_listing extracts lat/lng (D-07, range-validated), price/beds/baths/amenities/posted_date/source_url/source_name; photo URL whitelisted to craigslist.org/craigslistimages.org (T-03-05); SCRAPER_MAX_LISTINGS clamped to ≤30 (T-03-06); CreateJobBody now type-validates Phase 2 chips/global_flex (Pitfall 9, chip persistence deferred to Phase 4). +10 backend tests (17 total). SCRAP-02 + SCRAP-05 marked complete.
 - 2026-05-12: Completed Plan 03-02 — MapView (MapLibre + OpenFreeMap positron) with cluster source + price-pin symbol layer + setFeatureState hover/select sync (`promoteId:'id'`); ListingList with cardRefs Map for D-14 scroll-into-view; React.memo ListingCard with custom comparator (Pitfall 8); slide-out ListingDrawer (Escape/× close); safeUrl.ts host-whitelist helpers (T-03-09/T-03-10) gate every rendered source link and photo URL. page.tsx now uses D-11 side-by-side grid while preserving Realtime subscription verbatim; Pitfall 6 reset (`setSelectedId(null); setHoveredId(null);`) added to startSearch. +4 frontend test files / +18 tests (28 total). MAP-01/02/03/04 marked complete. Bundle +275 kB (maplibre-gl).
+- 2026-05-12: Plan 05-01 Tasks 1+3 complete (commits 0223d15, 286d2c3) — migration 0002 file ready + 19 RED tests (4 new files + 3 extended). Task 2 (`checkpoint:human-action`, blocking) awaits user: run `cd backend && npx supabase db push` and confirm verification SQL, then resume signal `migration-0002-pushed`.
 - 2026-05-12: Completed Phase 4 — llm-extraction-multi-source. Plan 04-01: CR-01/CR-02 hardened (Field max_length, safeUrl suffix fix), isAllowedApartmentsUrl added, ANTHROPIC_API_KEY enforced at import, 6 RED scaffolds. Plan 04-02: prefilter.py (≥5× reduction), llm_extract.py (Haiku 4.5 forced tool-use + prompt caching + Sonnet escalation), rate_limit.py (Redis SET NX PX + jitter). Plan 04-03: run_search_coordinator fan-out, mark_done atomic counter, Craigslist renamed + rate-limited. Plan 04-04: run_search_apartments (Playwright + stealth + prefilter + LLM), ENABLED_SOURCES=["craigslist","apartments"]. phase-4-smoke verified (SC#1–SC#4). 55 tests passing. **Phase 4 complete.**
 
 ## Decisions Accumulated
@@ -75,6 +76,8 @@ Status: Ready to plan
 - Phase 3 Plan 02: vitest mocks for maplibre-gl must use `vi.hoisted` for shared state and ES class constructors (not `vi.fn(() => instance)`); `new maplibregl.Map(...)` requires a real constructor.
 - Phase 3 Plan 02: `safeUrl.ts` host-whitelist module (`isAllowedCraigslistUrl`, `isAllowedCraigslistImage`, `formatPostedDate`) gates every rendered `<a href>` and `<img src>` — Phase 4 extends with per-source helpers as scrapers are added.
 - Phase 3 Plan 02: ListingDrawer is always mounted in the DOM; closed state slides off-screen with `translate-x-full` + `aria-hidden=true` so AT navigation skips it.
+- Phase 5 Plan 01: migration 0002 uses the Pitfall-10 two-step ALTER pattern (nullable → UPDATE per-row → SET NOT NULL → SET DEFAULT) so existing listing rows backfill from their own `created_at + 28d`, never migration-time `now() + 28d`.
+- Phase 5 Plan 01: `red_phase_05` marker is intentionally NOT registered in pyproject — plans 05-02/05-03 remove the marker as each test turns GREEN (Wave-0 pattern inherited from Phase 4 Plan 04-01).
 
 ### Quick Tasks Completed
 
@@ -84,12 +87,13 @@ Status: Ready to plan
 
 ## Session Continuity
 
-Last session: 2026-05-12T06:40:00Z
-Stopped at: Phase 4 complete — 4/4 plans done, phase-4-smoke verified, ready to plan Phase 5
+Last session: 2026-05-12T07:26:19.105Z
+Stopped at: Phase 5 planned — 4 plans ready to execute
 Resume file: None
 
 ## Blockers / Concerns
 
+- ⏸ Plan 05-01 Task 2 OPEN — `checkpoint:human-action` blocking: user must run `cd backend && npx supabase db push` and confirm verification SQL (expires_at NOT NULL+default, dedup_key/filter_hash/chips nullable, three indexes, zero NULL expires_at rows, idempotency on second push). Resume signal: `migration-0002-pushed`.
 - ⚠ Phase 4 code review CR-01: `mark_done` uses 5 non-atomic Redis commands — race can write wrong terminal status. Fix with Lua script or MULTI/EXEC in Phase 5.
 - ⚠ Phase 4 code review CR-02: `asyncio.get_event_loop()` in rate_limit.py — deprecated since Python 3.10. Fix: `asyncio.get_running_loop()`.
 - ⚠ Phase 4 code review CR-03: LLM-supplied source_url can override authoritative URL in llm_extract.py — always use authoritative source_url unconditionally.
