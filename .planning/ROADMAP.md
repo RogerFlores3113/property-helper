@@ -84,7 +84,7 @@
 **Mode:** mvp
 **Requirements:** CACH-01, CACH-02, SCRAP-08
 **Success Criteria:**
-1. A search whose filter hash matches a recent search returns matching cached listings sub-second without invoking any scraper. (Geographic bounding-box overlap was descoped from MVP and deferred to v2; v1 caches on filter_hash alone.)
+1. A search whose filter hash matches a recent search returns matching cached listings sub-second without invoking any scraper. (Geographic bounding-box overlap was descoped from MVP and deferred to v2; v1 caches on filter_hash alone. See 05-CONTEXT D-02/D-03.)
 2. Listings older than the 3–4 week TTL render with a "data from X date" label and a visible "re-search" / "extend" action that triggers a fresh scrape.
 3. The same property surfaced from two sources appears as one card with a `sources[]` array of links, deduplicated by normalized address + beds + sqft range.
 **Plans:** 5 plans
