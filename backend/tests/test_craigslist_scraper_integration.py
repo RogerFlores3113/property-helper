@@ -10,7 +10,6 @@ import uuid
 from pathlib import Path
 
 import httpx
-import pytest
 
 FIX = Path(__file__).parent / "fixtures"
 

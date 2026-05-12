@@ -11,7 +11,7 @@ from arq.connections import RedisSettings
 
 from ..db import close_pool, init_pool
 from ..settings import settings
-from .stub_scraper import run_search
+from .scrapers.craigslist import run_search
 
 
 async def startup(ctx):

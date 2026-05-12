@@ -4,11 +4,9 @@ Uses httpx.MockTransport to inject canned robots.txt responses. No live network.
 """
 from __future__ import annotations
 
-import logging
 from pathlib import Path
 
 import httpx
-import pytest
 
 from app.workers.scrapers.robots import RobotsCache
 
@@ -58,31 +56,31 @@ async def test_one_fetch_per_origin():
     assert fetch_count == 1, f"expected 1 robots.txt fetch, got {fetch_count}"
 
 
-async def test_disallow_skipped(caplog):
+async def test_disallow_skipped(capsys):
     text = _robots_text()
 
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(200, text=text)
 
-    caplog.set_level(logging.INFO)
     async with _make_client(handler) as client:
         cache = RobotsCache(client)
         allowed = await cache.allow("https://sfbay.craigslist.org/reply/foo")
 
     assert allowed is False
-    # structlog logs through stdlib logging by default; the event key 'robots.disallow'
-    # appears in the rendered message.
-    assert any("robots.disallow" in rec.getMessage() for rec in caplog.records)
+    captured = capsys.readouterr()
+    # structlog default renders JSON to stdout; SC#3 verifiability is
+    # "the string 'robots.disallow' appears in worker stdout".
+    assert "robots.disallow" in captured.out
 
 
-async def test_fetch_failure_logs_and_allows(caplog):
+async def test_fetch_failure_logs_and_allows(capsys):
     def handler(request: httpx.Request) -> httpx.Response:
         return httpx.Response(500, text="boom")
 
-    caplog.set_level(logging.WARNING)
     async with _make_client(handler) as client:
         cache = RobotsCache(client)
         allowed = await cache.allow("https://sfbay.craigslist.org/search/apa")
 
     assert allowed is True  # fail-open per RESEARCH Pattern 1
-    assert any("robots.fetch_failed" in rec.getMessage() for rec in caplog.records)
+    captured = capsys.readouterr()
+    assert "robots.fetch_failed" in captured.out
