@@ -62,7 +62,7 @@ export function ListingList({
       )}
       <ul
         role="list"
-        className="flex flex-col gap-4 overflow-y-auto"
+        className="flex flex-col gap-4 overflow-y-auto flex-1 min-h-0"
       >
         {listings.map((l) => (
           <ListingCard

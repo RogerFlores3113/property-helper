@@ -260,14 +260,16 @@ export default function Home() {
                 onSelect={setSelectedId}
               />
             </div>
-            <ListingList
-              listings={listings}
-              hoveredId={hoveredId}
-              selectedId={selectedId}
-              onHover={setHoveredId}
-              onSelect={setSelectedId}
-              status={listStatus}
-            />
+            <div className="overflow-hidden h-full">
+              <ListingList
+                listings={listings}
+                hoveredId={hoveredId}
+                selectedId={selectedId}
+                onHover={setHoveredId}
+                onSelect={setSelectedId}
+                status={listStatus}
+              />
+            </div>
           </div>
         )}
 

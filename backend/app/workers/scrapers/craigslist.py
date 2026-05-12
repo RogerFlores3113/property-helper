@@ -176,9 +176,22 @@ def parse_listing(html: str, source_url: str) -> tuple[dict, str | None]:
         time_node.attributes.get("datetime") if time_node else None
     )
 
-    # First photo — #thumbs first img or .gallery img
+    # First photo — prefer the full-size href from #thumbs <a>, fall back to <img src>.
+    # Craigslist thumbnail <img src> are low-res (e.g. 300x300); the parent <a href>
+    # links to the full-size image (600x450 or larger). Swap any embedded size token
+    # in the URL to 1200x900 for maximum available resolution.
+    thumb_anchor = tree.css_first("#thumbs a")
     img = tree.css_first("#thumbs a img, .gallery .slide img, .gallery img")
-    photo_url = img.attributes.get("src") if img else None
+    raw_photo = None
+    if thumb_anchor is not None:
+        raw_photo = thumb_anchor.attributes.get("href")
+    if not raw_photo and img is not None:
+        raw_photo = img.attributes.get("src")
+    # Upgrade resolution: replace WxH size token with 1200x900.
+    if raw_photo:
+        import re as _re
+        raw_photo = _re.sub(r"\d+x\d+(?:c)?(?=\.\w+$)", "1200x900", raw_photo)
+    photo_url = raw_photo
     if photo_url:
         try:
             host = urlparse(photo_url).hostname or ""
