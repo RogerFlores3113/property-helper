@@ -7,7 +7,7 @@ from typing import Literal
 
 from arq.connections import ArqRedis, RedisSettings, create_pool
 from fastapi import APIRouter, HTTPException
-from pydantic import UUID4, BaseModel
+from pydantic import UUID4, BaseModel, Field
 
 from ..db import get_pool
 from ..settings import settings
@@ -38,7 +38,7 @@ class CreateJobBody(BaseModel):
     silently ignored by the worker — see Pitfall 9.
     """
 
-    query: str
+    query: str = Field(..., min_length=1, max_length=512)
     chips: list[ChipModel] = []
     global_flex: bool = False
 

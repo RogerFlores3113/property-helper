@@ -84,3 +84,41 @@ async def test_fire_and_forget(clean_db, pg_pool, monkeypatch):
     fn, args, _ = stub.calls[0]
     assert fn == "run_search"
     assert args[0] == job_id
+
+
+async def test_query_max_length(clean_db, pg_pool, monkeypatch):
+    """CR-01 / T-04-05 — POST /api/jobs caps query at 512 chars.
+
+    Boundary: 512 accepted (200), 513 rejected (422).
+    """
+    monkeypatch.setattr(db_module, "_pool", pg_pool)
+    stub = _StubArq()
+
+    async def fake_arq():
+        return stub
+
+    monkeypatch.setattr(jobs_route, "arq", fake_arq)
+
+    transport = httpx.ASGITransport(app=main_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        ok = await client.post("/api/jobs", json={"query": "x" * 512})
+        assert ok.status_code == 200, ok.text
+
+        too_long = await client.post("/api/jobs", json={"query": "x" * 513})
+        assert too_long.status_code == 422
+
+
+async def test_query_min_length(clean_db, pg_pool, monkeypatch):
+    """CR-01 — empty query rejected with 422."""
+    monkeypatch.setattr(db_module, "_pool", pg_pool)
+    stub = _StubArq()
+
+    async def fake_arq():
+        return stub
+
+    monkeypatch.setattr(jobs_route, "arq", fake_arq)
+
+    transport = httpx.ASGITransport(app=main_app)
+    async with httpx.AsyncClient(transport=transport, base_url="http://test") as client:
+        empty = await client.post("/api/jobs", json={"query": ""})
+        assert empty.status_code == 422

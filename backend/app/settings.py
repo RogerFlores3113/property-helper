@@ -3,13 +3,20 @@
 Reads from backend/.env per D-02 (single env contract documented at .env.example).
 Env var defaults match D-10 exactly.
 """
+import os
+
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+# Test hook: when PH_DISABLE_ENV_FILE=1, do not load values from .env.
+# Used by test_settings_requires_anthropic_key to assert fail-fast behavior
+# when ANTHROPIC_API_KEY is absent from both env and any .env file.
+_ENV_FILE = None if os.environ.get("PH_DISABLE_ENV_FILE") == "1" else ".env"
 
 
 class Settings(BaseSettings):
     model_config = SettingsConfigDict(
-        env_file=".env",
+        env_file=_ENV_FILE,
         env_file_encoding="utf-8",
         extra="ignore",
         case_sensitive=False,
@@ -23,6 +30,10 @@ class Settings(BaseSettings):
 
     # Redis (D-03)
     redis_url: str = "redis://localhost:6379"
+
+    # Anthropic — D-09 / ASVS V14: required at startup, no default.
+    # pydantic-settings is case-insensitive, so this reads ANTHROPIC_API_KEY.
+    anthropic_api_key: str
 
     # Cost guard defaults (D-10)
     max_iters: int = 10
