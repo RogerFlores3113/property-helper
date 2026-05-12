@@ -12,6 +12,7 @@ from arq.connections import RedisSettings
 from ..db import close_pool, init_pool
 from ..settings import settings
 from .coordinator import run_search_coordinator
+from .scrapers.apartments import run_search_apartments
 from .scrapers.craigslist import run_search_craigslist
 
 
@@ -24,9 +25,8 @@ async def shutdown(ctx):
 
 
 class WorkerSettings:
-    # Plan 04-03: coordinator + craigslist sub-task.
-    # Plan 04-04 will append run_search_apartments.
-    functions = [run_search_coordinator, run_search_craigslist]
+    # Plan 04-04: coordinator + craigslist + apartments sub-tasks.
+    functions = [run_search_coordinator, run_search_craigslist, run_search_apartments]
     redis_settings = RedisSettings.from_dsn(settings.redis_url)
     on_startup = startup
     on_shutdown = shutdown
