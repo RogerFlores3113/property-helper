@@ -41,10 +41,9 @@ import structlog
 
 log = structlog.get_logger()
 
-# Module-level list — Plan 04-04 will append "apartments". Keep it a list,
-# not a tuple, so Plan 04 can do a simple ``ENABLED_SOURCES.append(...)`` in
-# a patch, or replace the literal in place.
-ENABLED_SOURCES: list[str] = ["craigslist"]
+# Module-level list — Plan 04-04 appended "apartments". Keep it a list, not a
+# tuple, so future plans can append additional sources in place.
+ENABLED_SOURCES: list[str] = ["craigslist", "apartments"]
 
 # 1-hour TTL on counter keys (Pitfall 8) — long enough for the slowest source
 # to complete, short enough to bound Redis growth if a sub-task is lost.
