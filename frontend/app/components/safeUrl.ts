@@ -53,6 +53,20 @@ export function isAllowedApartmentsUrl(url: string): boolean {
 }
 
 /**
+ * T-05-18 — per-source host whitelist dispatcher for the sources_list renderer.
+ * Maps a source_name to its corresponding `isAllowed*Url` helper and returns
+ * false for any unknown source. This is the single gate the multi-source
+ * link list uses; every entry must pass through it before rendering as an
+ * `<a href>`.
+ */
+export function isAllowedSourceUrl(source_name: string, url: string): boolean {
+  const key = (source_name || '').toLowerCase().trim();
+  if (key === 'craigslist') return isAllowedCraigslistUrl(url);
+  if (key === 'apartments') return isAllowedApartmentsUrl(url);
+  return false;
+}
+
+/**
  * Format an ISO date string as "Mon DD" (current year) or "Mon DD, YYYY" (prior
  * years). Returns the suffix only; caller wraps in `data from {suffix}`.
  */

@@ -1,14 +1,21 @@
+export type SourceEntry = {
+  source_name: string;
+  source_url: string;
+};
+
 export type ListingData = {
   address: string | null;
   price: number | null;
   beds: number | null;
   baths: number | null;
+  sqft?: number | null;
   amenities: string[];
   source_url: string;
   posted_date: string | null;
   lat: number | null;
   lng: number | null;
   source_name: string;
+  sources_list?: SourceEntry[];
 };
 
 export type Listing = {
@@ -17,6 +24,7 @@ export type Listing = {
   data: ListingData;
   photo_url: string | null;
   created_at: string;
+  expires_at: string;
 };
 
 export type JobStatus = 'pending' | 'running' | 'completed' | 'failed';
@@ -27,6 +35,7 @@ export type SearchJob = {
   query: string;
   created_at: string;
   completed_at: string | null;
+  chips?: Chip[];
 };
 
 export type JobResponse = { job: SearchJob | null; listings: Listing[] };
