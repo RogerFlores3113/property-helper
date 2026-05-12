@@ -30,7 +30,7 @@
 ### Caching & Freshness
 
 - [x] **CACH-01**: New searches check the shared listing cache first; cached listings matching the query's geographic bounding box and filters are returned instantly without re-scraping
-- [ ] **CACH-02**: Listings expire after 3–4 weeks (TTL); expired listings are labeled "data from X date" and the user is offered a "re-search" option to scrape fresh data
+- [x] **CACH-02**: Listings expire after 3–4 weeks (TTL); expired listings are labeled "data from X date" and the user is offered a "re-search" option to scrape fresh data — backend half landed in Plan 05-03 (expires_at DEFAULT now()+28d + PATCH /api/listings/{id}/extend); frontend stale-state UI lands in Plan 05-04
 - [ ] **CACH-03**: Search job persists in Supabase so the user can close the tab and return later to find completed results (fire-and-forget)
 - [ ] **CACH-04**: Each listing is stored at ~300–500 characters of structured data to stay within Supabase 500MB free tier; photos are stored as URLs only
 
@@ -43,7 +43,7 @@
 - [x] **SCRAP-05**: robots.txt is checked and respected for every target domain before scraping
 - [ ] **SCRAP-06**: LLM (Claude Haiku 4.5) extracts structured listing data from pre-filtered HTML using forced tool-use schema; raw HTML is never sent to the LLM
 - [ ] **SCRAP-07**: HTML is pre-filtered (selectolax + trafilatura) to extract only listing regions before passing to LLM — target 5–10× token reduction vs raw DOM
-- [ ] **SCRAP-08**: Scraped listings from multiple sources are deduplicated using normalized address + beds + sqft range composite key; duplicate sources are merged into a single listing with a `sources[]` array
+- [x] **SCRAP-08**: Scraped listings from multiple sources are deduplicated using normalized address + beds + sqft range composite key; duplicate sources are merged into a single listing with a `sources[]` array — Plan 05-03 (compute_dedup_key + run_dedup_for_job, mark_done hook, both scrapers stamp dedup_key on INSERT)
 
 ### Cost Controls
 
@@ -139,8 +139,8 @@
 | SCRAP-06 | Phase 4 | Pending |
 | SCRAP-07 | Phase 4 | Pending |
 | CACH-01 | Phase 5 | Complete (05-02) |
-| CACH-02 | Phase 5 | Pending |
-| SCRAP-08 | Phase 5 | Pending |
+| CACH-02 | Phase 5 | Backend complete (05-03); frontend pending (05-04) |
+| SCRAP-08 | Phase 5 | Complete (05-03) |
 | AUTH-01 | Phase 6 | Pending |
 | AUTH-02 | Phase 6 | Pending |
 | AUTH-03 | Phase 6 | Pending |
