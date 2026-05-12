@@ -20,5 +20,6 @@ vi.mock('next/navigation', () => ({
     refresh: vi.fn(),
     replace: vi.fn(),
   }),
+  useSearchParams: () => new URLSearchParams(),
   redirect: vi.fn(),
 }));
