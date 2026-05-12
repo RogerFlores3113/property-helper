@@ -7,10 +7,10 @@ status: ready_to_plan
 last_updated: "2026-05-12T01:17:33.621Z"
 progress:
   total_phases: 8
-  completed_phases: 2
+  completed_phases: 3
   total_plans: 9
   completed_plans: 8
-  percent: 89
+  percent: 38
 ---
 
 # Project State
@@ -20,7 +20,7 @@ progress:
 See: .planning/PROJECT.md
 
 **Core value:** Non-technical users say what they want once in natural language and get consolidated, map-visualized apartment results without being asked anything else.
-**Current phase:** 03
+**Current phase:** 4
 
 ## Phase Status
 
@@ -73,3 +73,9 @@ Started: 2026-05-10
 - Phase 3 Plan 02: vitest mocks for maplibre-gl must use `vi.hoisted` for shared state and ES class constructors (not `vi.fn(() => instance)`); `new maplibregl.Map(...)` requires a real constructor.
 - Phase 3 Plan 02: `safeUrl.ts` host-whitelist module (`isAllowedCraigslistUrl`, `isAllowedCraigslistImage`, `formatPostedDate`) gates every rendered `<a href>` and `<img src>` — Phase 4 extends with per-source helpers as scrapers are added.
 - Phase 3 Plan 02: ListingDrawer is always mounted in the DOM; closed state slides off-screen with `translate-x-full` + `aria-hidden=true` so AT navigation skips it.
+
+### Quick Tasks Completed
+
+| # | Description | Date | Commit | Directory |
+|---|-------------|------|--------|-----------|
+| 260511-pvo | fix scraper payload guard — check_payload on raw HTML (25-43KB) vs 8KB limit | 2026-05-12 | ae87cb1 | [260511-pvo-fix-scraper-payload-guard-check-payload-](./quick/260511-pvo-fix-scraper-payload-guard-check-payload-/) |

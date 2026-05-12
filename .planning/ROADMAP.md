@@ -61,7 +61,7 @@
 **Plans:** 3 plans
 - [x] 03-01-PLAN.md — Backend: capture Craigslist fixtures, RobotsCache (protego), Craigslist parser/scraper replacing stub_scraper, CreateJobBody chips/global_flex; full backend test suite green (SCRAP-02, SCRAP-05).
 - [x] 03-02-PLAN.md — Frontend: vitest config + types lat/lng/source_name; MapView (MapLibre + OpenFreeMap positron + clustering), ListingList, ListingCard, ListingDrawer, safeUrl helpers; page.tsx D-11 side-by-side layout (MAP-01–04). (Completed 2026-05-12; 7 test files / 28 tests passing; build clean.)
-- [ ] 03-03-PLAN.md — End-to-end manual smoke checkpoint verifying SC#1–#4 on live stack (resume signal phase-3-complete).
+- [x] 03-03-PLAN.md — End-to-end manual smoke checkpoint verifying SC#1–#4 on live stack (resume signal phase-3-complete).
 **UI hint**: yes
 
 ### Phase 4: LLM Extraction & Multi-Source
