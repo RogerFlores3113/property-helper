@@ -195,7 +195,7 @@ def run_app(port: int = DEFAULT_PORT, open_browser: bool = True, quiet: bool = F
     logging.getLogger(__name__).info("Property Helper running at %s (data: %s)", url, data_dir())
     logging.getLogger(__name__).info("If the window says it's locked, double-click Start Property Helper again "
                                      "(or run: prophelper open)")
-    _tell(quiet, "Starting Property Helper. Your browser will open in a moment. Keep this window open while you use it.")
+    _tell(quiet, "Property Helper is running. Your browser will open in a moment. Keep this window open while you use it. Close it to stop.")
     _tell(quiet, "If it doesn't open, double-click Start Property Helper again (it opens a fresh, unlocked window).")
     _tell(quiet, f"Your places are kept in: {data_dir()}")
     if quiet:  # no uvicorn lines on the console; the log file still has them

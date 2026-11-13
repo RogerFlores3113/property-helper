@@ -194,3 +194,21 @@ def test_search_page_uses_plain_words(store, setup):
     for word in ("deal-breaker", "criterion", "criteria", "nominatim", "anchor", " weight"):
         assert word not in html, word
     assert "must have" in html and "how much it matters" in html and "important places" in html
+
+
+def test_start_files_and_readme_say_keep_the_window_open():
+    from pathlib import Path
+    root = Path(__file__).resolve().parent.parent
+    for name in ("Start Property Helper.command", "Start Property Helper.bat"):
+        text = (root / name).read_text()
+        assert "Keep this window open while you use it. Close it to stop." in text and "Property Helper is running" in text
+    readme = (root / "README.md").read_text()
+    assert readme.index("Get started") < readme.index("What it does") < readme.index("Use it with Claude") < readme.index("## Advanced")
+    assert "Other AI apps and more" not in (root / "INSTALL.md").read_text()
+
+
+def test_connect_page_puts_the_simple_path_first_and_mcp_only_in_the_fold(client):
+    html = client.get("/connect").text
+    assert html.index("Connect the Claude app") < html.index("Other apps and details")
+    before_fold = html.split('id="other-apps"')[0]
+    assert "STDIO" not in before_fold and "MCP" not in before_fold

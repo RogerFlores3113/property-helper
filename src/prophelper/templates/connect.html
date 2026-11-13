@@ -18,10 +18,11 @@
   </h2>
   <p class="web-warning"><strong>Use the Claude app on this computer. Claude on the web (claude.ai in your browser) can't reach apps on your computer, so it won't work for this.</strong></p>
   <p>{{ claude.blurb }}</p>
+  <p class="fine"><strong>The short way:</strong> press the button below, then in Claude type <em>Add this listing to Property Helper</em>.</p>
   {% set missing = not claude.installed and not claude.connected %}
   {% if missing %}
   <p class="notice-line">We don't see the Claude app on this computer. Get the Claude app at claude.ai/download, then come back and press the button.</p>
-  {% if claude_code.installed %}<p class="notice-line">We do see Claude Code. If that is what you use, skip this step and use the Claude Code line under <a href="#claudecode">Other AI apps and more</a>: paste its one line into a terminal, then press Add skills below.</p>{% endif %}
+  {% if claude_code.installed %}<p class="notice-line">We do see Claude Code. If that is what you use, skip this step and use the Claude Code line under <a href="#other-apps">Other apps and details</a>: paste its one line into a terminal, then press Add skills below.</p>{% endif %}
   {% endif %}
   {% if status.config_error and not missing %}<p class="flash warn">{{ status.config_error }}</p>{% endif %}
   {% if status.launch_problem and not missing %}<p class="flash warn">{{ status.launch_problem }}</p>{% endif %}
@@ -58,8 +59,8 @@
 {% include "_skills_panel.html" %}
 
 <details class="card" id="other-apps">
-<summary><h2 class="inline-h">Other AI apps and more</h2></summary>
-<p class="fine">ChatGPT, Claude Code, Codex and LM Studio, what your AI app can do, and things to try asking. Only if you need them.</p>
+<summary><h2 class="inline-h">Other apps and details</h2></summary>
+<p class="fine">ChatGPT, Claude Code, Codex and LM Studio, what your AI app can do, things to try asking, and the advanced setup. Only if you need them.</p>
 <section class="card app-picker-card" id="app-picker">
   <h2>Which AI app do you use?</h2>
   <div class="app-picker" role="group" aria-label="Which AI app do you use?">
@@ -77,7 +78,7 @@
   <h2>ChatGPT desktop app</h2>
   <p>This is for the ChatGPT app on this computer. The ChatGPT website and the ChatGPT phone app can't reach apps on this computer, so they won't work for this.</p>
   <h3 class="step">1. Connect</h3>
-  <p id="chatgpt-copy"><strong>Not tested yet.</strong> We have not been able to try this in a real ChatGPT app. Connecting Codex on this page also connects the ChatGPT desktop app, because the two share one settings file (not confirmed). If nothing shows up in ChatGPT afterwards, use the steps instead. In ChatGPT, in ChatGPT, open Settings &gt; MCP servers &gt; Add server &gt; STDIO and enter this command and these arguments:</p>
+  <p id="chatgpt-copy"><strong>Not tested yet.</strong> We have not been able to try this in a real ChatGPT app. Connecting Codex on this page also connects the ChatGPT desktop app, because the two share one settings file (not confirmed). If nothing shows up in ChatGPT afterwards, use the steps instead. In ChatGPT, open Settings &gt; MCP servers &gt; Add server &gt; STDIO (the advanced way to add a tool) and enter this command and these arguments:</p>
   <p class="fine">Command:</p>
   <pre class="code wrap" id="chatgpt-cmd">{{ stdio_command }}</pre>
   <button class="btn small" type="button" data-copy="chatgpt-cmd" aria-label="Copy the ChatGPT command">Copy</button>
@@ -94,7 +95,7 @@
 <section class="card can-do">
   <h2>What Claude can and can't do</h2>
   <ul class="plain">
-    <li><strong>It can</strong> add places, move them forward through the stages, log notes and calls, book tours, add contacts, and read your searches and criteria to help you compare. It never deletes anything and never changes your own notes.</li>
+    <li><strong>It can</strong> add places, move them forward through the stages, log notes and calls, book tours, add contacts, and read your searches and what matters to you to help you compare. It never deletes anything and never changes your own notes.</li>
     <li><strong>It can't</strong> delete anything. Only you can delete, here in this window.</li>
     <li>Your data stays on this computer. Claude only sees what it asks for, and sends that to its own AI model.</li>
   </ul>
@@ -152,22 +153,23 @@
   {% endfor %}
   <section class="card connect-card app-card" data-app="all">
     <h3>Anything else</h3>
-    <p class="fine">ChatGPT and Claude in a web browser can't reach apps on your computer. Ollama on its own can't use tools; use it through LM Studio. Apps for developers (Cursor, Windsurf, Jan and others) can use the settings under "Set it up by hand" below.</p>
+    <p class="fine">ChatGPT and Claude in a web browser can't reach apps on your computer. Ollama on its own can't use tools; use it through LM Studio. Apps for developers (Cursor, Windsurf, Jan and others) can use the settings under "Advanced: set it up by hand" below.</p>
   </section>
 </div>
-</details>
-
-
-
-<details class="card">
-  <summary>Set it up by hand (for developers)</summary>
-  <p>Paste this into the app's settings for MCP servers (the "mcpServers" JSON most apps use):</p>
+<details class="advanced-fold">
+  <summary>Advanced: set it up by hand (MCP settings, for developers)</summary>
+  <p>For apps that take MCP servers, paste this into the app's settings (the "mcpServers" JSON most apps use):</p>
   <pre class="code" id="json-snip">{{ json_snippet }}</pre>
   <button class="btn small" type="button" data-copy="json-snip">Copy</button>
   <p>For Codex, add this to config.toml:</p>
   <pre class="code" id="codex-snip">{{ codex_snippet }}</pre>
   <button class="btn small" type="button" data-copy="codex-snip">Copy</button>
 </details>
+</details>
+
+
+
+
 
 <p class="fine"><a href="/skills">Skills page</a> (optional)</p>
 
