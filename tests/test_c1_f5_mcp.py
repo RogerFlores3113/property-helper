@@ -234,6 +234,7 @@ def test_failing_place_with_nothing_else_stays_hidden_but_counted(store):
     store.add_search("S", "rent", budget_max=1000)
     sid = store.current_search()["id"]
     store.add_criterion(sid, "price", weight=50, dealbreaker=True, target={"max": 1000})
+    store.update_search(sid, hide_dealbreakers=True)  # hiding is off by default since cycle 1
     a = structured(call(srv, "add_place", title="Cheap", address="1 C St", price=900))["place_id"]
     b = structured(call(srv, "add_place", title="Dear", address="2 C St", price=5000))["place_id"]
     out = text(call(srv, "list_places"))

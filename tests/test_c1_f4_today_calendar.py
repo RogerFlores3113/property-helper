@@ -56,6 +56,7 @@ def test_migration_adds_place_dates_to_an_old_database(tmp_path):
     s.close()
     con = sqlite3.connect(path)
     con.execute("DROP TABLE place_dates")
+    con.execute("ALTER TABLE searches DROP COLUMN people")  # a real version-1 database has neither
     con.execute("PRAGMA user_version = 1")
     con.commit()
     con.close()

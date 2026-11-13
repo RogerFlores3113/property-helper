@@ -48,8 +48,9 @@
       <div class="field"><label for="down_payment_pct">Down payment (%)</label><input id="down_payment_pct" name="down_payment_pct" type="number" min="0" max="100" step="any" value="{{ down_payment_pct }}"></div>
       <div class="field"><label for="mortgage_rate">Mortgage rate (%)</label><input id="mortgage_rate" name="mortgage_rate" type="number" min="0" max="30" step="any" value="{{ mortgage_rate }}"></div>
       <div class="field"><label for="loan_years">Loan length (years)</label><input id="loan_years" name="loan_years" type="number" min="1" max="50" step="1" value="{{ loan_years }}"></div>
+      <div class="field"><label for="pmi_rate_pct">Mortgage insurance, % of the loan a year</label><input id="pmi_rate_pct" name="pmi_rate_pct" type="number" min="0" max="5" step="any" value="{{ pmi_rate_pct }}"></div>
     </div>
-    <p class="fine">These make the monthly estimate for homes you would buy. It is an estimate, not financial advice.</p>
+    <p class="fine">These make the monthly estimate for homes you would buy. Mortgage insurance (PMI) is only added when the down payment is under 20%, and 0.5% a year is a rough guess. It is an estimate, not financial advice.</p>
     {{ button("Save", kind="primary", small=True) }}
   </form>
 </details>

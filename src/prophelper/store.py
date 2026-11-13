@@ -58,7 +58,7 @@ DEFAULT_CHECKLIST: tuple[tuple[str, str], ...] = (
 )
 DEFAULT_SETTINGS: dict[str, str] = {
     "ai_model": "claude-sonnet-5-5", "follow_up_days": "3", "map_tiles": "1", "geocode": "0", "show_photos": "0",
-    "strict_scraping": "0", "down_payment_pct": "20", "mortgage_rate": "6.5", "loan_years": "30",
+    "strict_scraping": "0", "down_payment_pct": "20", "mortgage_rate": "6.5", "loan_years": "30", "pmi_rate_pct": "0.5",
 }
 DEFAULT_CHECKLIST_BUY: tuple[tuple[str, str], ...] = (
     ("Mortgage pre-approval letter", "From your lender. Sellers expect one with an offer"),
@@ -75,6 +75,7 @@ PLACE_DATE_LABELS: dict[str, str] = {
     "offer_deadline": "Offer deadline", "inspection": "Inspection", "appraisal": "Appraisal",
     "financing_deadline": "Financing deadline", "closing": "Closing", "other": "Other date",
 }
+MAX_PEOPLE = 20
 STRICT_ADDS_PER_CALL = 5
 STRICT_ADDS_PER_HOUR = 20
 UPLOAD_LIMIT_BYTES = 20 * 1024 * 1024
@@ -304,7 +305,10 @@ CREATE TABLE IF NOT EXISTS place_dates (
 CREATE INDEX IF NOT EXISTS idx_place_dates_place ON place_dates(place_id, date);
 """
 
-_MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2_PLACE_DATES]
+# How many people share the cost of a place (rent split, or a household buying). One self-contained step.
+_MIGRATION_PEOPLE = "ALTER TABLE searches ADD COLUMN people INTEGER NOT NULL DEFAULT 1;"
+
+_MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2_PLACE_DATES, _MIGRATION_PEOPLE]
 
 
 class NotFound(LookupError):
@@ -860,9 +864,9 @@ class Store:
         return out
 
     def buy_settings(self) -> dict[str, str]:
-        """down_payment_pct, mortgage_rate and loan_years as saved (text), for :mod:`money`."""
+        """down_payment_pct, mortgage_rate, loan_years and pmi_rate_pct as saved (text), for :mod:`money`."""
         s = self.all_settings()
-        return {k: s[k] for k in ("down_payment_pct", "mortgage_rate", "loan_years")}
+        return {k: s[k] for k in ("down_payment_pct", "mortgage_rate", "loan_years", "pmi_rate_pct")}
 
     # ------------------------------------------------------------------ searches
     def _search_values(self, fields: dict[str, Any], partial: bool) -> dict[str, Any]:
@@ -891,13 +895,22 @@ class Store:
             out["budget_max"] = n
         if "hide_dealbreakers" in fields:
             out["hide_dealbreakers"] = 1 if clean_bool(fields["hide_dealbreakers"]) else 0
+        elif not partial:
+            out["hide_dealbreakers"] = 0  # places that miss a deal-breaker stay visible (last, with a note)
+        if "people" in fields:
+            n = to_number(fields["people"], "the number of people")
+            if n is None:
+                n = 1
+            if n != int(n) or not 1 <= n <= MAX_PEOPLE:
+                raise ValueError(f"People sharing the cost is a whole number from 1 to {MAX_PEOPLE}.")
+            out["people"] = int(n)
         if "is_sample" in fields:
             out["is_sample"] = 1 if fields["is_sample"] else 0
         return out
 
     def add_search(self, name: str, mode: str = "rent", **fields: Any) -> dict[str, Any]:
         """Make a search. Other fields: area, move_in (rent), target_close (buy), budget_max, notes,
-        hide_dealbreakers (default on), is_sample. The first search made becomes the current one."""
+        hide_dealbreakers (default off), people (default 1), is_sample. The first search made becomes the current one."""
         values = self._search_values({**fields, "name": name, "mode": mode}, partial=False)
         now = now_iso()
         with self._write():
@@ -1393,6 +1406,15 @@ class Store:
         if limit:
             sql += f" LIMIT {int(limit)}"
         return [_place_out(r) for r in self._rows(sql, params)]  # type: ignore[misc]
+
+    def protected_place_ids(self, search_id: int) -> set[int]:
+        """Places that must never be hidden by a deal-breaker: they have a tour, a linked contact, or a stage past
+        Saved. A person is already doing something with them."""
+        rows = self._rows(
+            "SELECT p.id FROM places p WHERE p.search_id = ? AND (p.stage <> 'Saved' "
+            "OR EXISTS (SELECT 1 FROM tours t WHERE t.place_id = p.id) "
+            "OR EXISTS (SELECT 1 FROM place_contacts pc WHERE pc.place_id = p.id))", (search_id,))
+        return {r["id"] for r in rows}
 
     def count_places(self, search_id: int | None = None, include_archived: bool = False) -> int:
         sql, params = "SELECT COUNT(*) AS n FROM places WHERE 1 = 1", []

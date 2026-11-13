@@ -24,7 +24,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from . import backups, enrich, helpers, parsers, paths, stages, today
+from . import backups, enrich, helpers, parsers, paths, scoring, stages, today
 from .deps import get_store, is_htmx, redirect, render
 from .store import COMMUTE_MODES, NotFound, StageRuleError, Store
 
@@ -96,7 +96,7 @@ def board_page(request: Request, show_hidden: int = 0):
     for p in shown:
         columns.setdefault(p["stage"], []).append(p)
     for cards in columns.values():
-        cards.sort(key=lambda p: (-(p["score_total"] if p["score_total"] is not None else -1), p["title"].lower()))
+        cards.sort(key=scoring.sort_key)  # places that fit first, then the ones that miss a deal-breaker or need a check
     totals = {s: len(c) for s, c in columns.items()}
     return render(request, "board.html", search=search, columns=columns, totals=totals, stages=mode_stages,
                   hidden_dealbreaker=hidden_deal, hidden_hand=hidden_hand, show_hidden=bool(show_hidden), total=len(rows))
@@ -299,7 +299,8 @@ async def create_search(request: Request):
         s = store.add_search(str(form.get("name", "")), str(form.get("mode", "rent")), area=form.get("area", ""),
                              move_in=form.get("move_in", "") if form.get("mode") != "buy" else None,
                              target_close=form.get("target_close", "") if form.get("mode") == "buy" else None,
-                             budget_max=form.get("budget_max", ""), notes=form.get("notes", ""))
+                             budget_max=form.get("budget_max", ""), notes=form.get("notes", ""),
+                             **({"people": form.get("people")} if form.get("people") else {}))
         store.set_current_search(s["id"])
     except ValueError as exc:
         return redirect("/search", error=str(exc))
@@ -310,7 +311,7 @@ async def create_search(request: Request):
 async def update_search(request: Request, search_id: int):
     store = get_store(request)
     form = await request.form()
-    values: dict[str, Any] = {k: form.get(k) for k in ("name", "mode", "area", "move_in", "target_close", "budget_max", "notes") if k in form}
+    values: dict[str, Any] = {k: form.get(k) for k in ("name", "mode", "area", "move_in", "target_close", "budget_max", "notes", "people") if k in form}
     values["hide_dealbreakers"] = "1" if form.get("hide_dealbreakers") == "1" else "0"
     try:
         store.update_search(search_id, **values)

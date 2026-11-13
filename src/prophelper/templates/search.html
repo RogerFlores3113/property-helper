@@ -54,10 +54,11 @@
       {{ field("Budget (most per month, or the most for a home)", "budget_max", shown.budget_max if shown.budget_max is not none else '', kind="number", step="any") }}
       {{ field("Move in by", "move_in", shown.move_in or '', kind="date") }}
       {{ field("Target close date", "target_close", shown.target_close or '', kind="date") }}
+      {{ field("People sharing the cost", "people", shown.people or 1, kind="number", step="1", hint="Rent or payment split between this many people. Place pages, the board and Compare then show a per-person cost.") }}
     </div>
     {{ field("Notes", "notes", shown.notes, kind="textarea", rows=3) }}
     <input type="hidden" name="hide_dealbreakers" value="0">
-    {{ check("Hide places that fail a deal-breaker from the board (a link shows them again)", "hide_dealbreakers", shown.hide_dealbreakers) }}
+    {{ check("Hide places that fail a deal-breaker (never hides a place with a tour, a contact, or a stage past Saved)", "hide_dealbreakers", shown.hide_dealbreakers) }}
     <p>{{ button("Save search", kind="primary") }}</p>
   </form>
   {% if shown.mode == 'buy' %}<p class="fine">Buying estimates use the down payment, rate and loan length in <a href="/settings#map">Settings</a>.</p>{% endif %}
@@ -65,7 +66,7 @@
 
 <section class="card" id="criteria">
   <h2>What matters to you</h2>
-  <p class="fine">Each criterion has a weight (how much it counts). Tick "Deal-breaker" for a must-have: places that fail it are hidden from the board.</p>
+  <p class="fine">Each criterion has a weight (how much it counts). Tick "Deal-breaker" for a must-have: places that miss it stay on your list, marked "Doesn't fit" with how far off they are, and sort last.</p>
   {% if criteria %}
   {% for c in criteria %}
   <form method="post" action="/criteria/{{ c.id }}" class="crit-form">
