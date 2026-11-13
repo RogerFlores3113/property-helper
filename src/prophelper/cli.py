@@ -289,7 +289,8 @@ def main(argv: list[str] | None = None) -> None:
         try:
             from .mcp_server import run_stdio
         except ImportError:
-            sys.exit("The AI connection (MCP server) isn't part of this build yet, so there is nothing for an AI app to start. "
+            sys.exit("The AI connection (MCP server) could not start, so there is nothing for an AI app to use. "
+                     "Property Helper needs its 'mcp' package for it; reinstall the app. "
                      "The app itself works without it: run prophelper serve.")
         from .store import Store
 
