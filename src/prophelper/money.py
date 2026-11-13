@@ -105,8 +105,11 @@ def rent_cost(place: dict[str, Any], pets: bool = True) -> dict[str, Any]:
         uncounted.append("parking")
         lines.append(_line("parking", "Parking", None, "not filled in"))
     else:
-        lines.append(_line("parking", "Parking", parking or 0,
-                           "included" if parking == 0 and str(place.get("parking") or "") in PRIVATE_PARKING else ""))
+        parking_line = _line("parking", "Parking", parking or 0,
+                             "included" if parking == 0 and str(place.get("parking") or "") in PRIVATE_PARKING else "")
+        if parking is None and not place.get("parking"):
+            parking_line["unset"] = True  # never filled in: shown as "Not known", not $0
+        lines.append(parking_line)
     pet_rent_listed = num(place.get("pet_rent")) or 0
     pet_rent = pet_rent_listed if pets else 0
     other = num(place.get("other_monthly_fees")) or 0
@@ -116,8 +119,13 @@ def rent_cost(place: dict[str, Any], pets: bool = True) -> dict[str, Any]:
                                                           ("pet deposit", num(place.get("pet_deposit")))) if v]
         pet_line["note"] = f"{NO_PETS_NOTE} ({', '.join(listed)} listed)"
         pet_line["not_counted"] = True
+    if pets and place.get("pet_rent") in (None, "") and str(place.get("pets") or "") != "none":
+        pet_line["unset"] = True
     lines.append(pet_line)
-    lines.append(_line("other", "Other monthly fees", other))
+    other_line = _line("other", "Other monthly fees", other)
+    if place.get("other_monthly_fees") in (None, ""):
+        other_line["unset"] = True  # shown as "Not known", never as $0
+    lines.append(other_line)
 
     months = place.get("lease_months")
     try:
@@ -132,8 +140,10 @@ def rent_cost(place: dict[str, Any], pets: bool = True) -> dict[str, Any]:
     spread = one_total / months
     detail = ", ".join(f"{label.lower()} ${num(place.get(k)):,.0f}" for k, label in one_time.items()
                        if num(place.get(k)))
-    lines.append(_line("one_time", f"One-time fees spread over {months} months", spread,
-                       detail or "none entered"))
+    one_line = _line("one_time", f"One-time fees spread over {months} months", spread, detail or "none entered")
+    if all(place.get(k) in (None, "") for k in one_time):
+        one_line["unset"] = True
+    lines.append(one_line)
     if not place.get("lease_months"):
         notes.append(f"Lease length not filled in, so one-time fees are spread over {DEFAULT_LEASE_MONTHS} months.")
     deposit = num(place.get("deposit"))

@@ -46,7 +46,7 @@ Nothing in it leaves the computer except what you read.
 - When the user pastes a listing link or text, read the page with your own tools and call add_place with every fact
   you can find (title, address, price, beds, baths, sqft, laundry, dishwasher, parking, pets, fees, utilities,
   available_from, lat and lng if known; for pets: pet_deposit, pet_weight_limit, pet_count_limit, pet_breed_note,
-  fenced_yard; when buying: days_on_market, special_assessment and its payer, closing_costs, listing_agent) and the FULL listing text as listing_text so the details survive when the
+  fenced_yard; when renting: months_up_front (months of rent due before move-in, default 1, 2 for first and last month) and tenant_pays (the utilities the tenant pays, such as gas, electric); when buying: days_on_market, special_assessment and its payer, closing_costs, listing_agent) and the FULL listing text as listing_text so the details survive when the
   listing comes down. The app itself makes no web requests and never opens a link. If you can't read the page, ask
   the user to paste it, or save what the link itself tells you.
 - Scraping: some sites forbid automated scraping in their terms of service. Check a site's terms before scraping it;
@@ -116,11 +116,13 @@ PLACE_PARAMS: list[tuple[str, Any, str]] = [
     ("pets", str, "cats, dogs, both or none"),
     ("pet_rent", float | str, "Monthly pet rent"), ("pet_fee", float | str, "One-time pet fee"),
     ("pet_deposit", float | str, "Pet deposit (comes back, so it is not part of the monthly cost)"),
-    ("pet_weight_limit", float | str, "Heaviest dog allowed, in pounds"),
+    ("pet_weight_limit", float | str, "Heaviest pet allowed, in pounds"),
     ("pet_count_limit", int | str, "Most pets allowed"),
     ("pet_breed_note", str, "What the listing says about breed limits, in a few words"),
     ("fenced_yard", bool, "True if there is a fenced yard, false if not"),
     ("utilities_included", str | bool, "What the rent covers, in words (for example 'water and trash', or 'all utilities'). false means none"),
+    ("tenant_pays", str, "Utilities the tenant pays on top of the rent, from: electric, gas, water, trash, internet, heat (for example 'gas, electric')"),
+    ("months_up_front", int | str, "Months of rent due before move-in, 0 to 12 (1 when only the first month, 2 for first and last month)"),
     ("utilities_estimate", float | str, "Monthly utilities the user would pay on top (only if you really know)"),
     ("year_built", int | str, ""),
     ("available_from", str, "Date, YYYY-MM-DD"), ("lease_start", str, "Date, YYYY-MM-DD"), ("lease_end", str, "Date, YYYY-MM-DD"),
@@ -325,6 +327,14 @@ def _extra_facts(p: dict[str, Any]) -> list[str]:
     note = ("Breed note: " + _t(p["pet_breed_note"], "pet breed note", 300)) if p.get("pet_breed_note") else ""
     if pet or note:
         out.append("Pet details: " + ", ".join(pet) + (". " if pet and note else "") + note)
+    rent = []
+    months = p.get("months_up_front")
+    if months is not None and int(months) != 1:
+        rent.append("rent due before move-in: " + ("nothing" if int(months) == 0 else f"{int(months)} months"))
+    if p.get("tenant_pays"):
+        rent.append("you pay these utilities: " + str(p["tenant_pays"]))
+    if rent and (p.get("cost") or {}).get("mode") != "buy":
+        out.append("Renting details: " + ", ".join(rent))
     buy = []
     if p.get("days_on_market") is not None:
         buy.append(f"{p['days_on_market']} days on the market")

@@ -25,7 +25,7 @@ def test_pet_columns_are_matched():
     mapped = {headers[i]: f for i, f in csv_io.match_columns(headers).items()}
     assert mapped["Pet Rent"] == "pet_rent" and mapped["Pet Fee"] == "pet_fee"
     assert "pet_rent" in csv_io.FIELD_LABELS and "pet_fee" in csv_io.FIELD_LABELS
-    for head, field in (("Pet rent per month", "pet_rent"), ("Monthly pet rent", "pet_rent"), ("One time pet fee", "pet_fee"), ("Pet deposit", "pet_fee")):
+    for head, field in (("Pet rent per month", "pet_rent"), ("Monthly pet rent", "pet_rent"), ("One time pet fee", "pet_fee"), ("Pet fee", "pet_fee"), ("Pet deposit", "pet_deposit")):
         assert csv_io.match_columns([head]) == {0: field}, head
 
 

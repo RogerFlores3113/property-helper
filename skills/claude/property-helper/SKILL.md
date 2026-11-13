@@ -71,7 +71,7 @@ The app itself never opens links. You read the page with your own tools and pass
    Apartments.com, Craigslist, Facebook, property site...), price, beds, baths, sqft, laundry (`in_unit`,
    `in_building`, `hookups`, `none`; say them to the user in plain words), dishwasher, parking and its cost, pets and pet rent, utilities_included and any fees (application
    fee, move-in fees, pet fee, other monthly fees, deposit), year_built, available_from (YYYY-MM-DD) and lease_months.
-   For pets also pass pet_deposit, pet_weight_limit (pounds), pet_count_limit, pet_breed_note and fenced_yard. When
+   For rentals also pass months_up_front (months of rent due before move-in, 0 to 12, default 1; 2 for first and last month) and tenant_pays (the utilities the tenant pays: electric, gas, water, trash, internet, heat). For pets also pass pet_deposit, pet_weight_limit (pounds), pet_count_limit, pet_breed_note and fenced_yard. When
    buying also pass days_on_market, special_assessment and special_assessment_payer (buyer or seller), closing_costs
    and listing_agent. Read them from the listing; leave a field out when the listing does not say.
    `get_place` also shows the cash needed on move-in day (rent) or cash to close (buy), the listing's own payment

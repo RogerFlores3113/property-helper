@@ -104,17 +104,21 @@
       fetch("/places/" + encodeURIComponent(card.dataset.id) + "/stage", {
         method: "POST", body: data, headers: csrfFree(), credentials: "same-origin"
       }).then(function (resp) {
+        if (resp.status === 409) {
+          return resp.json().then(function (info) { var e = new Error("confirm"); e.confirmUrl = info.confirm_url; throw e; });
+        }
         if (!resp.ok) { throw new Error("failed"); }
         return resp.json();
       }).then(function (info) {
         var days = card.querySelector("[data-days]");
         if (days) { days.textContent = info.days === 0 ? "Moved today" : info.days + " day" + (info.days === 1 ? "" : "s") + " in stage"; }
         say("Moved " + company + " to " + stage + "." + (info.note ? " " + info.note : ""));
-      }).catch(function () {
+      }).catch(function (err) {
         fromBody.insertBefore(card, next && next.parentNode === fromBody ? next : fromBody.querySelector(".col-empty"));
         card.dataset.stage = oldStage;
         if (select) { select.value = oldStage; }
         recount();
+        if (err && err.confirmUrl) { window.location.href = err.confirmUrl; return; }  // final steps are confirmed on their own page
         say("Could not move " + company + ". It is back in " + oldStage + ".");
       });
     }

@@ -48,7 +48,7 @@
     {% if c.mode == 'buy' and c.down_payment is not none %}<p class="fine">Down payment {{ c.down_payment|money }} ({{ c.settings.down_payment_pct|round(1) }}%). Loan {{ c.loan_amount|money }}.{% if c.pmi is not none %} Mortgage insurance (PMI) is a rough estimate of {{ c.pmi|money }} a month, since you put down under 20%.{% endif %}</p>{% endif %}
     <table class="cost-table">
       {% for l in c.lines %}<tr><td>{{ l.label }}{% if l.note %}<div class="fine">{{ l.note }}</div>{% endif %}</td>
-        <td class="amt">{% if l.amount is none %}<span class="missing">unknown</span>{% else %}{{ l.amount|money(cents=True) }}{% endif %}</td></tr>{% endfor %}
+        <td class="amt">{% if l.amount is none %}<span class="missing">unknown</span>{% elif l.unset %}<span class="fine">Not known</span>{% else %}{{ l.amount|money(cents=True) }}{% endif %}</td></tr>{% endfor %}
       <tr class="total"><td>Per month{% if c.uncounted %}, so far{% else %}, all in{% endif %}</td><td class="amt">{% if c.total is not none %}{{ c.total|money(cents=True) }}{% else %}&ndash;{% endif %}</td></tr>
       {% if c.per_person is not none %}<tr class="total"><td>Per person ({{ c.people }} people)</td><td class="amt">{{ c.per_person|money(cents=True) }}</td></tr>{% endif %}
     </table>

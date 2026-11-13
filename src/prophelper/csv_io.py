@@ -33,7 +33,8 @@ EXPORT_COLUMNS: list[tuple[str, str]] = [
     ("Move in fees", "move_in_fees"), ("Broker fee", "broker_fee"), ("HOA", "hoa"), ("Property tax", "property_tax"),
     ("Insurance", "insurance"), ("Year built", "year_built"),
     ("Heaviest pet allowed (lb)", "pet_weight_limit"), ("Pet count limit", "pet_count_limit"), ("Breed rules", "pet_breed_note"),
-    ("Pet deposit (refundable)", "pet_deposit"), ("Fenced yard", "fenced_yard"), ("Days on market", "days_on_market"),
+    ("Pet deposit (refundable)", "pet_deposit"), ("Months of rent due before move-in", "months_up_front"),
+    ("Utilities you pay", "tenant_pays"), ("Fenced yard", "fenced_yard"), ("Days on market", "days_on_market"),
     ("Special assessment", "special_assessment"), ("Who pays the special assessment", "special_assessment_payer"),
     ("Closing costs", "closing_costs"), ("Listing agent", "listing_agent"), ("Latitude", "lat"), ("Longitude", "lng"),
     ("Rating", "rating"), ("Fit score", "fit_score"), ("Red flags", "red_flags"), ("Notes", "notes"),
@@ -59,6 +60,8 @@ _EXTRA_NAMES: dict[str, tuple[str, ...]] = {
     "deposit": ("security deposit",), "application_fee": ("app fee", "application"),
     "parking_cost": ("parking fee", "parking rent"), "pet_rent": ("monthly pet rent", "pet fee monthly", "pet rent per month", "pet rent monthly", "pet rent mo", "pet monthly"),
     "pet_fee": ("one time pet fee", "pet fee one time", "pet fee onetime", "pet charge", "pet deposit fee"), "utilities_estimate": ("estimated utilities", "utility estimate", "utilities cost"),
+    "months_up_front": ("months up front", "months due up front", "months rent up front", "months of rent up front"),
+    "tenant_pays": ("tenant pays", "utilities tenant pays", "utilities you pay", "tenant utilities"),
     "other_monthly_fees": ("monthly fees", "other fees", "fees per month"),
     "hoa": ("hoa fee", "hoa dues", "hoa monthly"), "property_tax": ("tax", "taxes", "property taxes"),
     "year_built": ("built", "year"), "pet_weight_limit": ("pet weight limit", "weight limit", "pet weight", "max pet weight"),
@@ -84,7 +87,7 @@ def _build_synonyms() -> dict[str, str]:
         table.setdefault(_norm_header(field), field)
     for dropped in ("listing_text", "photo_urls", "hidden", "is_sample", "ai_notes", "fit_notes", "lease_start", "lease_end"):
         table.pop(_norm_header(dropped), None)
-    table["pet deposit"] = "pet_fee"  # older sheets (and the first versions of this app) call the one-time pet fee a deposit
+    table["pet deposit"] = "pet_deposit"  # a plain "Pet deposit" is money that comes back, like the listing reader reads it ("Pet fee" is the one-time fee)
     return table
 
 

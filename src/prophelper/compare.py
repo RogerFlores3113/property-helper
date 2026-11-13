@@ -19,6 +19,7 @@ from __future__ import annotations
 from typing import Any
 
 from . import helpers
+from . import money as money_mod
 
 MIN_PLACES, MAX_PLACES = 2, 4
 LAUNDRY_RANK = {"in_unit": 3, "in_building": 2, "hookups": 1, "none": 0}
@@ -119,7 +120,8 @@ def guessed_list(p: dict[str, Any]) -> list[str]:
 
 def _not_counted_text(p: dict[str, Any]) -> str:
     if p["cost"]["missing"]:
-        return ", ".join(p["cost"]["missing"])
+        named = next((u for u in p["cost"].get("uncounted") or [] if u.startswith("utilities (")), "")  # names what the tenant pays
+        return ", ".join(named if (named and m == "utilities estimate") else m for m in p["cost"]["missing"])
     guessed = guessed_list(p)
     return "nothing left out, but " + ", ".join(guessed) if guessed else "nothing, all costs are in"
 
@@ -265,7 +267,13 @@ def _line_unset(p: dict[str, Any], key: str) -> bool:
         return p.get("pet_rent") in (None, "") and str(p.get("pets") or "") != "none"
     if key == "parking":
         return p.get("parking_cost") in (None, "") and not p.get("parking")
+    if key == "other":
+        return p.get("other_monthly_fees") in (None, "")
     return False
+
+
+def _one_time_unset(p: dict[str, Any]) -> bool:
+    return any(l["key"] == "one_time" and l.get("unset") for l in p["cost"].get("lines", []))
 
 
 def _row(key: str, label: str, cells: list[dict[str, Any]], better: str | None = None, *, only_if_any: bool = False) -> dict[str, Any] | None:
@@ -310,7 +318,7 @@ def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
         for p in places:
             found = next((ln for ln in p["cost"]["lines"] if ln["key"] == key), None)
             amount = found["amount"] if found else None
-            if amount is not None and _line_unset(p, key):
+            if amount is not None and ((found or {}).get("unset") or _line_unset(p, key)):
                 amount = None
             cells.append(_money(amount, True))
         cost_rows.append(_row("cost-" + key, label, cells, "low", only_if_any=True))
@@ -337,12 +345,15 @@ def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
     section("Dates and money up front", [
         _row("available", "Available from", [_plain(helpers.day_text(p["available_from"]) if p.get("available_from") else "") for p in places], only_if_any=True),
         _row("lease_months", "Lease length (months)", [_num(p.get("lease_months")) for p in places], only_if_any=True),
+        _row("months_up_front", "Months of rent due before move-in",
+             [_num(money_mod.months_up_front(p)) if p["cost"].get("mode") == "rent" else _cell(None) for p in places], "low", only_if_any=True)
+        if any(p["cost"].get("mode") == "rent" and money_mod.months_up_front(p) > 1 for p in places) else None,
         _row("cash_up_front", _cash_label(places), [_cash_cell(p) for p in places],
              "low" if len({p["cost"].get("mode") for p in places}) == 1 else None, only_if_any=True),
         _row("days_on_market", "Days on the market", [_num(p.get("days_on_market")) for p in places], only_if_any=True)
         if any(p["cost"].get("mode") == "buy" for p in places) else None,
         _row("deposit", "Deposit (comes back)", [_money(p.get("deposit")) for p in places], "low", only_if_any=True),
-        _row("upfront", "Fees paid once (application, move-in, broker, pet)", [_money(p["cost"].get("one_time_total")) if p["cost"].get("mode") == "rent" else _cell(None) for p in places], "low", only_if_any=True),
+        _row("upfront", "Fees paid once (application, move-in, broker, pet)", [_money(None if _one_time_unset(p) else p["cost"].get("one_time_total")) if p["cost"].get("mode") == "rent" else _cell(None) for p in places], "low", only_if_any=True),
     ])
 
     # ---- commutes: one row per anchor, using the mode of that anchor's commute criterion

@@ -19,6 +19,7 @@ Other pages (map, calendar, compare, contacts, documents, checklist, AI, CSV) li
 from __future__ import annotations
 
 import shutil
+from urllib.parse import quote
 from typing import Any
 
 from fastapi import APIRouter, HTTPException, Request
@@ -120,6 +121,16 @@ FINAL_STEP_NOTES = {
 }
 
 
+@router.get("/places/{place_id}/stage-confirm", include_in_schema=False)
+async def stage_confirm(request: Request, place_id: int, stage: str = ""):
+    store = get_store(request)
+    current = _place_or_404(store, place_id)
+    target = stages.normalize_stage(_search_of(store, current)["mode"], stage)
+    if not target or target == current["stage"] or not stages.is_closed(target):
+        return redirect(f"/places/{place_id}")
+    return render(request, "stage_confirm.html", place=current, target=target, note="", meaning=FINAL_STEP_NOTES[target])
+
+
 @router.post("/places/{place_id}/stage", include_in_schema=False)
 async def move_place(request: Request, place_id: int):
     store = get_store(request)
@@ -127,10 +138,13 @@ async def move_place(request: Request, place_id: int):
     stage = str(form.get("stage", ""))
     note = str(form.get("note", ""))
     current = _place_or_404(store, place_id)
-    if not is_htmx(request) and str(form.get("confirm", "")) != "yes":
+    if str(form.get("confirm", "")) != "yes":
         # Lease signed, Closed and Passed end the hunt for a place: ask first (a page, so it works without scripts).
         target = stages.normalize_stage(_search_of(store, current)["mode"], stage)
         if target and target != current["stage"] and stages.is_closed(target):
+            if is_htmx(request):  # the board's drag or dropdown: refuse here and send the person to the confirm page
+                return JSONResponse({"ok": False, "confirm_url": f"/places/{place_id}/stage-confirm?stage={quote(target)}",
+                                     "error": f"Moving to {target} needs one more click on its own page."}, status_code=409)
             return render(request, "stage_confirm.html", place=current, target=target, note=note,
                           meaning=FINAL_STEP_NOTES[target])
     try:
