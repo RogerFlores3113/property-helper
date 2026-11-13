@@ -42,6 +42,15 @@
       <p>{{ button("Make this search", kind="primary") }}</p>
     </form>
   </details>
+
+  <details>
+    <summary><strong>Import a search</strong></summary>
+    <p class="fine">Got a search file from a housemate (made with "Export this search")? Choose it here. You see what it adds before anything is saved, and it always becomes a new search.</p>
+    <form method="post" action="/searches/import" enctype="multipart/form-data" class="stack">
+      <div class="field"><label for="imp-file">Search file</label><input id="imp-file" type="file" name="file" accept=".json,application/json" required></div>
+      <p>{{ button("Look at it", small=True) }}</p>
+    </form>
+  </details>
 </section>
 
 {% if shown %}
@@ -57,11 +66,13 @@
       {{ field("Target close date", "target_close", shown.target_close or '', kind="date") }}
       {{ field("People sharing the cost", "people", shown.people or 1, kind="number", step="1", hint="Rent or payment split between this many people. Place pages, the board and Compare then show a per-person cost.") }}
     </div>
+    {{ field("Names of the people sharing", "people_names", shown.people_names|join(', '), hint="Only when more than one person shares the cost. Separate the names with commas, like Sam, Priya. Each person can then rate every place and add a short note on its page.") }}
     {{ field("Notes", "notes", shown.notes, kind="textarea", rows=3) }}
     <input type="hidden" name="hide_dealbreakers" value="0">
     {{ check("Hide places that fail a must have from the board (never hides a place with a tour, a contact, or a stage past Saved)", "hide_dealbreakers", shown.hide_dealbreakers) }}
     <p>{{ button("Save search", kind="primary") }}</p>
   </form>
+  <p class="fine"><a class="btn small" href="/search/export.json?id={{ shown.id }}" download>Export this search</a> Saves a file with this search, what matters, the important places and the places with their listing text, to send to a housemate. It never holds your contacts, documents, notes or ratings.</p>
   {% if shown.mode == 'buy' %}<p class="fine">Buying estimates use the down payment, rate and loan length in <a href="/settings#map">Settings</a>.</p>{% endif %}
 </section>
 

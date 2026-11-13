@@ -90,6 +90,7 @@ def enrich_place(store: Store, place: dict[str, Any], search: dict[str, Any], *,
         "flags": flags, "possible_scam": serious,
         "hidden_by_dealbreaker": bool(search.get("hide_dealbreakers") and score["fails_dealbreaker"] and not protected),
         "people": people, "per_person": cost.get("per_person"),
+        "opinions": store.opinion_stats(place["id"]) if people > 1 else None,  # {"count", "average"} of the people's own ratings
     })
     return out
 

@@ -22,20 +22,35 @@ from pathlib import Path
 from typing import Any
 
 from fastapi import APIRouter, Form, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, Response
 from starlette.background import BackgroundTask
 from starlette.formparsers import MultiPartParser
 
-from . import ai_key, backups, geocode, paths
+from . import ai_key, backups, geocode, paths, share
 from .deps import get_store, redirect, render
 from .sample_data import load_sample_data
-from .store import STRICT_ADDS_PER_CALL, STRICT_ADDS_PER_HOUR, Store
+from .store import STRICT_ADDS_PER_CALL, STRICT_ADDS_PER_HOUR, NotFound, Store
 
 router = APIRouter()
 
 
 class TooBig(Exception):
     pass
+
+
+async def discard_body(request: Request, cap: int) -> int:
+    """Read and throw away what the browser is still sending, up to ``cap`` bytes, so that our answer ("that file is
+    too big") reaches it. A server that replies and hangs up while the browser is still sending makes the browser show
+    "connection reset" instead of the answer. Nothing is kept. Returns how many bytes were read."""
+    seen = 0
+    try:
+        async for chunk in request.stream():
+            seen += len(chunk)
+            if seen >= cap:
+                break
+    except Exception:  # the browser gave up or hung up: nothing left to read
+        pass
+    return seen
 
 
 async def read_form(request: Request, limit: int):
@@ -45,6 +60,7 @@ async def read_form(request: Request, limit: int):
     except ValueError:
         declared = 0
     if declared > limit + 512 * 1024:
+        await discard_body(request, 2 * limit + 1024 * 1024)  # let the browser finish sending, so it can read our answer
         raise TooBig
     if (request.headers.get("content-type") or "").lower().startswith("multipart/form-data"):
         parser = MultiPartParser(request.headers, request.stream(), max_files=20, max_fields=500, max_part_size=limit)
@@ -315,3 +331,70 @@ def sample_data_remove(request: Request):
         return redirect("/settings", error=str(exc))
     counts = store.remove_sample_data()
     return redirect("/settings", notice=f"Removed the sample data ({counts['places']} places). Your own entries were not touched.")
+
+
+# --------------------------------------------------------------------------- share a search with a housemate
+@router.get("/search/export.json", include_in_schema=False)
+def search_export(request: Request, id: int | None = None):
+    """Download a search as a file a housemate can read back in with "Import a search" (see ``share.py``). It holds the
+    search, what matters, the important places it uses and the places with their facts and listing text. Never contacts,
+    documents, notes, ratings, AI text or the AI key."""
+    store = get_store(request)
+    try:
+        search = store.get_search(id) if id else store.current_search()
+    except NotFound:
+        search = None
+    if search is None:
+        return redirect("/search", error="That search doesn't exist.")
+    return Response(share.export_bytes(store, search["id"]), media_type="application/json",
+                    headers={"Content-Disposition": f'attachment; filename="{share.export_filename(search)}"', "X-Content-Type-Options": "nosniff"})
+
+
+@router.post("/searches/import", include_in_schema=False)
+async def search_import_upload(request: Request):
+    """Read a file made by "Export this search" and show what it would add. Writes nothing yet."""
+    try:
+        form = await read_form(request, share.MAX_IMPORT_BYTES)
+    except TooBig:
+        return redirect("/search", error="That file is too big (limit 5 MB). A shared search is usually much smaller.")
+    try:
+        upload = form.get("file")
+        if upload is None or not hasattr(upload, "read") or not getattr(upload, "filename", ""):
+            return redirect("/search", error="Choose the search file first.")
+        data = await upload.read(share.MAX_IMPORT_BYTES + 1)
+        filename = re.sub(r"[^\w .()-]+", "", str(upload.filename))[:80] or "your file"
+    finally:
+        await form.close()
+    try:
+        doc = share.read_export(data)
+    except share.NotAnExport as exc:
+        return redirect("/search", error=str(exc))
+    token = share.hold(filename, doc)
+    s = doc["search"]
+    return render(request, "share_import.html", token=token, filename=filename, headline=share.preview_text(doc),
+                  mode=str(s.get("mode") or "rent"), criteria=len(doc["criteria"]), anchors=len(doc["anchors"]),
+                  same_name=any(x["name"].lower() == " ".join(str(s.get("name") or "").split()).lower() for x in get_store(request).list_searches(include_archived=True)))
+
+
+@router.post("/searches/import/apply", include_in_schema=False)
+async def search_import_apply(request: Request):
+    """Do exactly what the preview said: add the file as a NEW search. Nothing that is already saved is changed."""
+    form = await request.form()
+    token = str(form.get("token", ""))
+    got = share.held(token)
+    if got is None:
+        return redirect("/search", error="That file is no longer waiting. Choose it again.")
+    store = get_store(request)
+    try:
+        out = share.apply_import(store, got[1])
+    except ValueError as exc:
+        return redirect("/search", error=f"Couldn't add that search, so nothing was changed ({exc})")
+    share.release(token)
+    s = out["search"]
+    extra = ""
+    if out["skipped"]:
+        extra += f" {out['skipped']} item{'s' if out['skipped'] != 1 else ''} in the file couldn't be read and were left out."
+    if out["link_dropped"]:
+        extra += f" {out['link_dropped']} listing link{'s were' if out['link_dropped'] != 1 else ' was'} already saved in another search, so those places have no link."
+    return redirect(f"/search?id={s['id']}", notice=f"Added the search '{s['name']}' with {out['places']} place{'s' if out['places'] != 1 else ''}. "
+                                                    f"It isn't your current search yet; use Switch to this when you are ready.{extra}")

@@ -79,6 +79,8 @@ MAX_PEOPLE = 20
 STRICT_ADDS_PER_CALL = 5
 STRICT_ADDS_PER_HOUR = 20
 UPLOAD_LIMIT_BYTES = 20 * 1024 * 1024
+PERSON_NAME_MAX = 40
+OPINION_NOTE_MAX = 500
 
 PLACE_TEXT = ("title", "address", "unit", "city", "state", "zip", "url", "source", "listing_text", "laundry", "parking",
               "pets", "utilities_included", "available_from", "lease_start", "lease_end", "notes", "ai_notes",
@@ -308,7 +310,20 @@ CREATE INDEX IF NOT EXISTS idx_place_dates_place ON place_dates(place_id, date);
 # How many people share the cost of a place (rent split, or a household buying). One self-contained step.
 _MIGRATION_PEOPLE = "ALTER TABLE searches ADD COLUMN people INTEGER NOT NULL DEFAULT 1;"
 
-_MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2_PLACE_DATES, _MIGRATION_PEOPLE]
+# Names for the people sharing a search, and each person's own rating and note per place. One self-contained step.
+_MIGRATION_OPINIONS = """
+ALTER TABLE searches ADD COLUMN people_names TEXT NOT NULL DEFAULT '[]';
+CREATE TABLE IF NOT EXISTS place_opinions (
+    place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+    person TEXT NOT NULL,
+    rating INTEGER CHECK (rating IS NULL OR rating BETWEEN 1 AND 5),
+    note TEXT NOT NULL DEFAULT '',
+    updated_at TEXT NOT NULL,
+    PRIMARY KEY (place_id, person)
+);
+"""
+
+_MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2_PLACE_DATES, _MIGRATION_PEOPLE, _MIGRATION_OPINIONS]
 
 
 class NotFound(LookupError):
@@ -906,6 +921,8 @@ class Store:
             if n != int(n) or not 1 <= n <= MAX_PEOPLE:
                 raise ValueError(f"People sharing the cost is a whole number from 1 to {MAX_PEOPLE}.")
             out["people"] = int(n)
+        if "people_names" in fields:
+            out["people_names"] = json.dumps(clean_people_names(fields["people_names"]))
         if "is_sample" in fields:
             out["is_sample"] = 1 if fields["is_sample"] else 0
         return out
@@ -942,8 +959,70 @@ class Store:
         if values:
             values["updated_at"] = now_iso()
             sets = ", ".join(f"{k} = ?" for k in values)
-            self._exec(f"UPDATE searches SET {sets} WHERE id = ?", (*values.values(), search_id))
+            with self._write():
+                self._exec(f"UPDATE searches SET {sets} WHERE id = ?", (*values.values(), search_id))
+                if "people_names" in values or "people" in values:
+                    self._rename_opinion_people(current, self.get_search(search_id))
         return self.get_search(search_id)
+
+    # ------------------------------------------------------------------ opinions (each person's own rating and note)
+    def _rename_opinion_people(self, before: dict[str, Any], after: dict[str, Any]) -> None:
+        """When a person is renamed (same position in the list), their saved opinions follow the new name. Opinions of
+        a name that no longer exists are kept, so a typo never loses anyone's words, but they stop showing."""
+        old, new = people_slots(before), people_slots(after)
+        # Only a name that is gone from the list, replaced in the same position by a name that wasn't there: that is a
+        # rename. Reordering or adding people leaves everyone's words where they are.
+        pairs = [(o, n) for o, n in zip(old, new) if o != n and o not in new and n not in old]
+        if not pairs:
+            return
+        for o, n in pairs:
+            self._exec("UPDATE OR IGNORE place_opinions SET person = ? WHERE person = ? AND place_id IN "
+                       "(SELECT id FROM places WHERE search_id = ?)", (n, o, after["id"]))
+
+    def set_opinion(self, place_id: int, person: str, rating: Any = None, note: Any = "") -> dict[str, Any] | None:
+        """Save one person's 1 to 5 rating and short note for a place (both blank clears it). ``person`` must be one of the
+        names of the place's search (see ``people_slots``). These are the user's own words: the app window writes
+        them, there is no AI tool for it. Returns the saved row, or None when it was cleared."""
+        place = self._require_place(place_id)
+        slots = people_slots(self.get_search(place["search_id"]))
+        who = _text(person, PERSON_NAME_MAX)
+        if who not in slots:
+            raise ValueError("That isn't one of the people on this search. Name the people on the Search page first.")
+        n = to_number(rating, "rating") if str(rating if rating is not None else "").strip() else None
+        if n is not None:
+            n = int(round(n))
+            if not 1 <= n <= 5:
+                raise ValueError("A rating is from 1 to 5.")
+        text = _text(note, OPINION_NOTE_MAX)
+        if n is None and not text:
+            self._exec("DELETE FROM place_opinions WHERE place_id = ? AND person = ?", (place_id, who))
+            return None
+        self._exec("INSERT INTO place_opinions(place_id, person, rating, note, updated_at) VALUES (?, ?, ?, ?, ?) "
+                   "ON CONFLICT(place_id, person) DO UPDATE SET rating = excluded.rating, note = excluded.note, "
+                   "updated_at = excluded.updated_at", (place_id, who, n, text, now_iso()))
+        return self._row("SELECT * FROM place_opinions WHERE place_id = ? AND person = ?", (place_id, who))
+
+    def list_opinions(self, place_id: int) -> list[dict[str, Any]]:
+        """Saved opinions of a place, in the order of the search's people. Names no longer on the search are left out."""
+        place = self._require_place(place_id)
+        slots = people_slots(self.get_search(place["search_id"]))
+        rows = {r["person"]: r for r in self._rows("SELECT * FROM place_opinions WHERE place_id = ?", (place_id,))}
+        return [rows[n] for n in slots if n in rows]
+
+    def opinion_slots(self, place_id: int) -> list[dict[str, Any]]:
+        """One entry per person on the place's search (empty when one person), each ``{"person", "rating", "note"}`` with
+        the saved values or blanks. For the form on the place page."""
+        place = self._require_place(place_id)
+        slots = people_slots(self.get_search(place["search_id"]))
+        rows = {r["person"]: r for r in self._rows("SELECT * FROM place_opinions WHERE place_id = ?", (place_id,))}
+        return [{"person": n, "rating": rows[n]["rating"] if n in rows else None, "note": rows[n]["note"] if n in rows else ""} for n in slots]
+
+    def opinion_stats(self, place_id: int) -> dict[str, Any] | None:
+        """``{"count": how many people rated it, "average": mean of their ratings to one decimal}`` or None when nobody has."""
+        rated = [o["rating"] for o in self.list_opinions(place_id) if o["rating"] is not None]
+        if not rated:
+            return None
+        return {"count": len(rated), "average": round(sum(rated) / len(rated), 1)}
 
     def list_searches(self, include_archived: bool = False) -> list[dict[str, Any]]:
         sql = "SELECT * FROM searches" + ("" if include_archived else " WHERE archived_at IS NULL") + " ORDER BY id"
@@ -2093,13 +2172,51 @@ class Store:
         """Every row of the main tables, for a JSON or CSV export you read yourself. No settings and no AI key."""
         out: dict[str, list[dict[str, Any]]] = {}
         for table in ("searches", "criteria", "anchors", "places", "commutes", "events", "tours", "contacts", "place_contacts",
-                      "contact_log", "documents", "checklist_items", "ai_drafts", "place_dates"):
+                      "contact_log", "documents", "checklist_items", "ai_drafts", "place_dates", "place_opinions"):
             out[table] = self._rows(f"SELECT * FROM {table}")
         return out
 
 
 def _tidy_row(row: dict[str, Any]) -> dict[str, Any]:
-    return {k: (_tidy_num(v) if isinstance(v, float) else v) for k, v in row.items()}
+    out = {k: (_tidy_num(v) if isinstance(v, float) else v) for k, v in row.items()}
+    if isinstance(out.get("people_names"), str):
+        try:
+            names = json.loads(out["people_names"])
+        except ValueError:
+            names = []
+        out["people_names"] = [str(n) for n in names] if isinstance(names, list) else []
+    return out
+
+
+def clean_people_names(value: Any) -> list[str]:
+    """A list of names from a list or from text with one name per line or separated by commas. Blank names and
+    repeats (ignoring case) are dropped, each name is cut to 40 characters, at most 20 names."""
+    if value is None:
+        return []
+    items = value if isinstance(value, (list, tuple)) else re.split(r"[\n,;]", str(value))
+    out: list[str] = []
+    for raw in items:
+        name = " ".join(str(raw or "").split())[:PERSON_NAME_MAX]
+        if name and name.lower() not in (n.lower() for n in out):
+            out.append(name)
+    return out[:MAX_PEOPLE]
+
+
+def people_slots(search: dict[str, Any]) -> list[str]:
+    """The names of the people sharing a search: the names given, then 'Person 3' and so on up to ``people``.
+    One person (or none) means no names are needed, so the list is empty."""
+    n = int(search.get("people") or 1)
+    if n < 2:
+        return []
+    names = list(search.get("people_names") or [])[:n]
+    taken = {x.lower() for x in names}
+    i = 1
+    while len(names) < n:
+        label = f"Person {i}"
+        i += 1
+        if label.lower() not in taken:
+            names.append(label)
+    return names
 
 
 def _ev_cut(value: Any, limit: int = AI_EVENT_TEXT_MAX) -> str:

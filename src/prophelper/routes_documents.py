@@ -15,10 +15,12 @@ from fastapi.responses import FileResponse
 
 from . import docfiles
 from .deps import get_store, redirect
+from .routes_data import discard_body
 from .store import DOCUMENT_KINDS, NotFound, Store
 
 router = APIRouter()
 OVERHEAD_BYTES = 256 * 1024  # form fields and boundaries around the file
+DRAIN_BYTES = 2 * docfiles.LIMIT_BYTES + OVERHEAD_BYTES  # the most we read and discard from a too-big upload
 
 
 def _place_or_404(store: Store, place_id: int) -> dict[str, Any]:
@@ -45,7 +47,10 @@ async def upload_document(request: Request, place_id: int):
     except ValueError:
         declared = 0
     if declared > docfiles.LIMIT_BYTES + OVERHEAD_BYTES:
-        return redirect(target, error=f"That file is too big. Files can be up to {docfiles.LIMIT_TEXT}.")
+        # Refuse before keeping any of it, but read and discard the rest of what the browser is sending (up to twice the
+        # limit), or the browser sees a reset connection instead of our friendly answer.
+        await discard_body(request, DRAIN_BYTES)
+        return redirect(target, error=docfiles.too_big_text())
     form = await request.form()
     upload = form.get("file")
     kind = str(form.get("kind") or "other")

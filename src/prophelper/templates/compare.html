@@ -1,5 +1,5 @@
 {% extends "base.html" %}
-{% from "_macros.html" import page_head, button, stage_badge, score_pill %}
+{% from "_macros.html" import page_head, button, check, stage_badge, score_pill %}
 {% from "_fit.html" import fit_badge %}
 {% block title %}Compare &middot; Property Helper{% endblock %}
 {% block body %}
@@ -36,6 +36,15 @@
 </table>
 </div>
 <p class="fine">A check mark is the best value in that row when the places differ: the lowest cost, the highest score, the biggest size, the newest building. Facts where neither is better, such as bedrooms, are only shaded. "Unknown" means the place has no value saved, so it can't win or lose that row. A cost that leaves something out can't be called the lowest.</p>
+<section class="card no-print" aria-labelledby="share-h">
+  <h2 id="share-h">Share this comparison</h2>
+  <p class="fine">Saves one page you can email or text to a housemate or a parent. It opens in any browser and has no links, pictures or maps. Your contacts, phone numbers, documents and AI notes are never in it.</p>
+  <form method="get" action="/compare/share.html" class="stack">
+    {% for p in places %}<input type="hidden" name="ids" value="{{ p.id }}">{% endfor %}
+    {{ check("Include my notes", "notes", false, id="share-notes", hint="Adds the notes you wrote and what each person thinks. Leave it off to keep them private.") }}
+    <p>{{ button("Save a copy to share", kind="primary") }}</p>
+  </form>
+</section>
 <h2 class="no-print">Pick different places</h2>
 {% endif %}
 

@@ -644,6 +644,9 @@ def build_server(store: Store) -> FastMCP:
                          + (f", at {_t(t['where_note'], 'tour location', 80)}" if t["where_note"] else ""))
         for c in store.contacts_for_place(e["id"]):
             lines.append(f"Contact {c['id']}: {_t(c['name'], 'contact name', 80)} ({c['role']}" + (f", {_t(c['company'], 'contact company', 60)}" if c["company"] else "") + ")")
+        for o in store.list_opinions(e["id"]):  # the people's own words: read-only here, there is no tool that writes them
+            lines.append(f"Opinion of {_t(o['person'], 'person name', 40)}: " + (f"{o['rating']} of 5" if o["rating"] is not None else "no rating")
+                         + (f", {_t(o['note'], 'their note', 200)}" if o["note"] else ""))
         if e.get("url"):
             lines.append("Link: " + _t(e["url"], "listing link", 300))
         if e.get("photo_urls"):
