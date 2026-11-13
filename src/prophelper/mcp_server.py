@@ -508,7 +508,7 @@ def build_server(store: Store) -> FastMCP:
         notes: list[str] = []
         matched = ""
         if not created:
-            matched = "the same link" if dup and fields.get("url") and dup.get("url") == normalize_url(fields["url"]) else "the same address and unit"
+            matched = "the same link" if dup and fields.get("url") and normalize_url(dup.get("url")) == normalize_url(fields["url"]) else "the same address and unit"
             last = next((e for e in store.list_events(place["id"]) if e["source"] == "ai"), None)
             notes.append(f"It was already saved (matched on {matched}), so I updated #{place['id']} instead of adding a second one. "
                          + (last["body"].replace("Added again: ", "").rstrip(".") + "." if last else "")

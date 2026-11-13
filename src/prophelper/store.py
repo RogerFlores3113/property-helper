@@ -1114,9 +1114,11 @@ class Store:
                 out[key] = clean_date(raw, key.replace("_", " "))
             elif key == "url":
                 text = _text(raw, 2000)
-                out[key] = normalize_url(text) if text else ""
-                if text and not out[key]:
+                # Kept as typed (so a spreadsheet export shows "www.zillow.com"). Only duplicate checks use the
+                # normalized form. A link typed without http(s):// gets https:// so it still opens.
+                if text and not normalize_url(text):
                     raise ValueError("That link doesn't look like a web address (it should start with https://).")
+                out[key] = text if not text or re.match(r"^[a-z][a-z0-9+.-]*://", text, re.I) else "https://" + text
             else:
                 out[key] = _text(raw, TEXT_LIMITS.get(key, 500))
         for key in PLACE_REAL:
@@ -1176,9 +1178,10 @@ class Store:
         normalized street address plus unit in the same search. Archived places count."""
         norm = normalize_url(url)
         if norm:
-            row = self._row("SELECT * FROM places WHERE url = ? AND id != ?", (norm, exclude_id or 0))
-            if row:
-                return _place_out(row)
+            # Links are stored as typed, so compare the normalized form of each saved link.
+            for row in self._rows("SELECT * FROM places WHERE url != '' AND id != ?", (exclude_id or 0,)):
+                if normalize_url(row["url"]) == norm:
+                    return _place_out(row)
         key = normalize_address(address)
         if key and search_id is not None:
             unit_key = normalize_unit(unit)
@@ -1221,7 +1224,7 @@ class Store:
             if existing is not None and bool(existing.get("is_sample")) != bool(values.get("is_sample")):
                 # A real place never folds into a made-up sample (removing the samples would take it too), and
                 # the other way round. The sample gives up a link they share.
-                if existing.get("url") and existing["url"] == values.get("url"):
+                if existing.get("url") and normalize_url(existing["url"]) == normalize_url(values.get("url")):
                     self._exec("UPDATE places SET url = '' WHERE id = ?", (existing["id"],))
                 existing = None
             if existing is not None:
