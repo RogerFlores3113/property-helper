@@ -16,6 +16,16 @@ SPEED_MPH = {"walk": 3.0, "bike": 10.0, "transit": 12.0, "drive": 25.0}
 EXTRA_MINUTES = {"walk": 0, "bike": 0, "transit": 8, "drive": 4}
 EARTH_RADIUS_MILES = 3958.8
 SOURCES = ("estimate", "you", "ai")
+NO_LOCATION_MESSAGE = ("{name} has no location yet, so there is no commute to work out. "
+                       "On the Search page, press Find on map next to it, or enter its coordinates yourself.")
+MODE_VERBS = {"walk": "Walk", "bike": "Bike", "transit": "Transit", "drive": "Drive"}
+
+
+def commute_label(mode: str, minutes: int | float | None, anchor_name: str) -> str:
+    """'Drive to Office, 15 min or less'. Always names the important place."""
+    way = MODE_VERBS.get(mode, str(mode).capitalize())
+    mins = f", {int(round(minutes))} min or less" if minutes else ""
+    return f"{way} to {anchor_name}{mins}"
 
 
 def haversine_miles(lat1: float, lng1: float, lat2: float, lng2: float) -> float:

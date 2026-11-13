@@ -1,7 +1,7 @@
 #!/bin/bash
 # Double-click this file to start Property Helper on a Mac.
 # The first time: right-click it, choose Open, then press Open again.
-# To quit, close this window.
+# Keep this window open while you use Property Helper. Close it to stop.
 cd "$(dirname "$0")" || exit 1
 
 # The app prints its own plain lines ("Starting Property Helper.") and keeps the technical log in a file.
@@ -27,7 +27,11 @@ if ! command -v uv >/dev/null 2>&1; then
   command -v uv >/dev/null 2>&1 || problem "Step 1 of 2 (installing the helper called uv) finished but the helper could not be found. Close this window and double-click again."
 fi
 
+echo "Property Helper is starting. Keep this window open while you use it. Close it to stop."
 if [ ! -d .venv ]; then
-  echo "The first time can take about a minute while it sets itself up."
+  echo "The first time can take about a minute while it sets itself up. Please wait."
 fi
+echo "When it says \"Property Helper is running\", your browser opens by itself."
 uv run --quiet prophelper || problem "Step 2 of 2 (starting the app) stopped with a problem. Double-click again to try once more."
+echo
+echo "Property Helper has stopped. You can close this window."

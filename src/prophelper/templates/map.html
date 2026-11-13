@@ -11,7 +11,7 @@
 <section class="card"><h2>No search yet</h2><p>Make a search and add places to see them here. <a href="/search">Start a search</a>.</p></section>
 {% else %}
 
-<form method="get" action="/map" class="inline-form" aria-label="Rings around an anchor">
+<form method="get" action="/map" class="inline-form" aria-label="Rings around an important place">
   <div class="field"><label for="map-anchor">Rings of 1, 2 and 3 miles around</label>
     <select id="map-anchor" name="anchor">
       <option value="0"{% if no_rings|default(false) %} selected{% endif %}>No rings</option>
@@ -20,7 +20,7 @@
   {% if show_hidden %}<input type="hidden" name="show_hidden" value="1">{% endif %}
   {{ button("Show rings", small=True) }}
 </form>
-{% if not anchors %}<p class="fine">There are no anchors yet. <a href="/search#anchors">Add one</a> (your work or school) to get distance rings and commute times.</p>{% endif %}
+{% if not anchors %}<p class="fine">There are no important places yet. <a href="/search#anchors">Add one</a> (your work or school) to get distance rings and commute times.</p>{% endif %}
 
 <div class="map-layout">
   <div>
@@ -31,7 +31,7 @@
     {% else %}
     <p class="fine">Map pictures are off, so pins show on a plain background. To see streets, turn on "Show map pictures" in <a href="/settings#map">Settings</a> (your browser then loads them from OpenStreetMap).</p>
     {% endif %}
-    <p class="legend fine" aria-label="Key"><span class="pin-key pin-good">70 or more</span> <span class="pin-key pin-ok">40 to 69</span> <span class="pin-key pin-low">under 40</span> <span class="pin-key pin-none">no score</span> <span class="pin-key pin-anchor">anchor</span></p>
+    <p class="legend fine" aria-label="Key"><span class="pin-key pin-good">70 or more</span> <span class="pin-key pin-ok">40 to 69</span> <span class="pin-key pin-low">under 40</span> <span class="pin-key pin-none">no score</span> <span class="pin-key pin-anchor">important place</span></p>
   </div>
 
   <div>
@@ -45,7 +45,7 @@
           <span class="fine">{{ p.lat|round(4) }}, {{ p.lng|round(4) }}</span></div></li>
         {% endfor %}
       </ul>
-      {% else %}<p class="fine">No place has a map point yet. Add one below{% if geocode %}, or press Find on map{% endif %}.</p>{% endif %}
+      {% else %}<p class="fine">No place has a map point yet. Add one below, or press Find on map from address.</p>{% endif %}
       {% if hidden %}<p class="fine">{{ hidden }} hidden {{ 'place is' if hidden == 1 else 'places are' }} left out. <a href="/map?show_hidden=1{% if chosen %}&amp;anchor={{ chosen.id }}{% endif %}">Show {{ 'it' if hidden == 1 else 'them' }}</a>.</p>
       {% elif show_hidden %}<p class="fine"><a href="/map{% if chosen %}?anchor={{ chosen.id }}{% endif %}">Hide the hidden places again</a>.</p>{% endif %}
     </section>
@@ -53,16 +53,17 @@
     <section class="card" id="no-location" aria-labelledby="noloc-h">
       <h2 id="noloc-h">Places without a location <span class="count">{{ unlocated|length }}</span></h2>
       {% if unlocated %}
-      <p class="fine">Type the latitude and longitude (right-click a spot in any map app to copy them), or {% if geocode %}press Find on map to look up the address{% else %}turn on address lookup in <a href="/settings#map">Settings</a> to find them from the address{% endif %}.</p>
+      <p class="fine">Press "Find on map from address" (it sends only the address to OpenStreetMap's free lookup service, and asks you first if lookup is off), or enter the coordinates yourself (right-click a spot in any map app to copy them).</p>
       <ul class="items">
         {% for p in unlocated %}
         <li class="item"><div class="item-main"><a class="item-title" href="/places/{{ p.id }}">{{ p.title }}</a><span class="item-sub">{{ p.address or 'No address yet' }}{% if p.city %}, {{ p.city }}{% endif %}</span>
+          <details class="coords"><summary>Enter coordinates yourself</summary>
           <form method="post" action="/places/{{ p.id }}/location" class="inline-form">
             <div class="field"><label for="lat-{{ p.id }}">Latitude</label><input id="lat-{{ p.id }}" name="lat" inputmode="decimal" placeholder="40.1102" required></div>
             <div class="field"><label for="lng-{{ p.id }}">Longitude</label><input id="lng-{{ p.id }}" name="lng" inputmode="decimal" placeholder="-88.2301" required></div>
             {{ button("Save location", small=True, aria="Save the location of " ~ p.title) }}
-          </form>
-          {% if geocode %}<form method="post" action="/places/{{ p.id }}/geocode" class="inline">{{ button("Find on map", small=True, aria="Find " ~ p.title ~ " on the map from its address", title="Sends this street address to OpenStreetMap Nominatim") }}</form>{% endif %}
+          </form></details>
+          <form method="post" action="/places/{{ p.id }}/geocode" class="inline">{{ button("Find on map from address", small=True, aria="Find " ~ p.title ~ " on the map from its address", title="Sends only this street address to OpenStreetMap's free lookup service") }}</form>
         </div></li>
         {% endfor %}
       </ul>

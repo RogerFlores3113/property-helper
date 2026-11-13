@@ -76,6 +76,16 @@ def default_label(kind: str, target: dict[str, Any] | None = None, mode: str = "
     return KIND_LABELS.get(kind, kind.title())
 
 
+def _auto_label(kind: str, target: dict[str, Any], ctx: dict[str, Any]) -> str:
+    """The label for a criterion saved without one. A commute names its important place, so two never read the same."""
+    if kind == "commute":
+        anchors = ctx.get("anchors", {})
+        a = anchors.get(target.get("anchor_id")) if target.get("anchor_id") is not None else next(iter(anchors.values()), None)
+        if a:
+            return commute_mod.commute_label(target.get("mode") or "bike", _num(target.get("minutes")), a["name"])
+    return default_label(kind, target, ctx.get("mode", "rent"))
+
+
 def _result(score: float | None, value: str, target: str, detail: str, *, known: bool, passes: bool | None,
             gap: str = "") -> dict[str, Any]:
     return {"score": UNKNOWN_SCORE if score is None else _clamp(score), "known": known, "value": value, "target": target,
@@ -132,13 +142,19 @@ def _score_commute(c: dict[str, Any], place: dict[str, Any], ctx: dict[str, Any]
     t = c["target"]
     mins = _num(t.get("minutes"))
     mode = t.get("mode") or "bike"
-    anchor = ctx.get("anchors", {}).get(t.get("anchor_id"))
+    anchors = ctx.get("anchors", {})
+    # A commute with no place chosen means the first important place (the form's "First one" choice).
+    anchor = anchors.get(t["anchor_id"]) if t.get("anchor_id") is not None else next(iter(anchors.values()), None)
     anchor_name = anchor["name"] if anchor else "that place"
     target = f"{_fmt(mins, '', ' min')} or less by {mode} to {anchor_name}" if mins else "any"
     if anchor is None:
-        return _result(None, "", target, "The place you wanted to reach was removed from the anchors.", known=False, passes=None)
+        gone = t.get("anchor_id") is not None
+        return _result(None, "", target, "The important place you wanted to reach was removed, so choose another one in What matters." if gone
+                       else "There is no important place yet. Add one on the Search page, like Work or Campus.", known=False, passes=None)
     found = commute_mod.resolve(place, anchor, mode, ctx.get("commutes", ()))
     if found is None:
+        if not commute_mod.has_point(anchor):
+            return _result(None, "", target, commute_mod.NO_LOCATION_MESSAGE.format(name=anchor_name), known=False, passes=None)
         return _unknown(target, f"The {mode} time to {anchor_name}")
     value = found["label"]
     if not mins:
@@ -249,9 +265,7 @@ def score_criterion(c: dict[str, Any], place: dict[str, Any], ctx: dict[str, Any
         status = "check"
     else:
         status = "pass" if r["passes"] else "fail"
-    anchor = ctx.get("anchors", {}).get(c["target"].get("anchor_id")) if kind == "commute" else None
-    label = c.get("label") or default_label(kind, c["target"], ctx.get("mode", "rent"), anchor["name"] if anchor else "")
-    return {"id": c.get("id"), "kind": kind, "label": label,
+    return {"id": c.get("id"), "kind": kind, "label": c.get("label") or _auto_label(kind, c["target"], ctx),
             "weight": c.get("weight", 0), "dealbreaker": bool(c.get("dealbreaker")), "dealbreaker_status": status, **r}
 
 

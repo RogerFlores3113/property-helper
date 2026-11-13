@@ -107,10 +107,9 @@ def test_place_geocode_is_off_by_default(store, setup, api):
     h = api(FOUND)
     c = local_client(store)
     r = c.post(f"/places/{p['id']}/geocode", follow_redirects=False)
-    assert r.status_code == 303 and h.requests == []  # nothing was sent
+    assert r.status_code == 200 and h.requests == []  # nothing was sent; the page explains and asks
     assert store.get_place(p["id"])["lat"] is None
-    page = c.get(f"/places/{p['id']}")
-    assert "Address lookup is off, so nothing was sent" in page.text
+    assert "Turn on and find" in r.text and "sends only the address you typed" in r.text
 
 
 def test_place_geocode_saves_the_point_and_sends_only_the_address(store, setup, api):
@@ -125,7 +124,7 @@ def test_place_geocode_saves_the_point_and_sends_only_the_address(store, setup, 
     sent = str(h.requests[0].url)
     assert "private" not in sent and "secret" not in sent and "3B" not in sent and "Maple%20Row%20Flats" not in sent
     assert "Found it and saved the map point" in c.get(f"/places/{p['id']}").text
-    assert "Find this address on the map" in c.get(f"/places/{p['id']}").text
+    assert "Find on map from address" in c.get(f"/places/{p['id']}").text
 
 
 def test_place_without_an_address_and_errors_do_not_change_anything(store, api):

@@ -66,7 +66,7 @@ person's places and settings are stored in a separate folder and are kept.
 ## 3. What success looks like
 
 Confirm the app opened: the installer prints that Property Helper should be open in the
-browser, or the person sees a browser tab at `http://127.0.0.1:8767`. If that page says
+browser, or the person sees a browser tab at `http://127.0.0.1:8767`. When the app is started from a Start Property Helper file, its window says "Property Helper is running" and must stay open while the person uses the app. If that page says
 it is locked, tell the person to open Property Helper from its app icon (Applications on
 Mac, Start menu on Windows, applications menu on Linux) instead.
 
@@ -77,7 +77,7 @@ private" below. Property Helper opens in the person's web browser at
 `http://127.0.0.1:8767`.
 
 Then tell the person, in plain words: "Property Helper is installed and open in your
-browser. Open **Connect** (top bar), press **Connect the Claude app**, then press **Add
+browser. Open **More** in the top bar, then **Connect an AI app**, press **Connect the Claude app**, then press **Add
 skills**." Those two buttons are on the Connect page of the Property Helper window that just
 opened. **Connect the Claude app** links the app to Claude, and **Add skills** adds the Property
 Helper skills (for the Claude app that also means uploading a plugin file by hand, and the
@@ -87,7 +87,7 @@ Which control applies depends on the app the person uses:
 
 - Claude app (the desktop app): **Connect the Claude app**, then **Add skills**.
 - Claude Code: paste the one line shown under "Claude Code" on the Connect page (under "Other
-  AI apps and more") into a terminal, then press **Add skills**. **Connect the Claude app** is
+  apps and details") into a terminal, then press **Add skills**. **Connect the Claude app** is
   not for Claude Code and stays off when the Claude app is not installed.
 - Codex: **Connect** on the Codex card, then **Add skills**.
 - ChatGPT: the Connect page has an **I use ChatGPT** button. That route is not tested yet.
@@ -142,7 +142,7 @@ later fixes it.
 Stop and tell the person what happened, in one or two plain sentences. Do not try to
 work around it.
 
-- Intel Mac: only an Apple Silicon build exists. Say so, and point the person to the "Run it" steps in README.md (download the ZIP and double-click Start Property Helper). Do not install anything else.
+- Intel Mac: only an Apple Silicon build exists. Say so, and point the person to "Get started" in README.md (download the ZIP and double-click Start Property Helper). Do not install anything else.
 - No network, or a download error: say so, and suggest they check their connection and ask again.
 - Checksum mismatch: the file was not installed on purpose. Report it and stop. Never
   skip or edit the check, and never install a file that failed it.

@@ -1,5 +1,5 @@
 @echo off
-rem Double-click this file to start Property Helper on Windows.
+rem Double-click this file to start Property Helper on Windows. Keep its window open while you use the app; close it to stop.
 rem If Windows shows "Windows protected your PC", press More info, then Run anyway.
 cd /d "%~dp0"
 
@@ -20,9 +20,13 @@ if errorlevel 1 (
   if errorlevel 1 goto problem
 )
 
-if not exist ".venv" echo The first time can take about a minute while it sets itself up.
+echo Property Helper is starting. Keep this window open while you use it. Close it to stop.
+if not exist ".venv" echo The first time can take about a minute while it sets itself up. Please wait.
+echo When it says "Property Helper is running", your browser opens by itself.
 uv run --quiet prophelper
 if errorlevel 1 goto problem
+echo.
+echo Property Helper has stopped. You can close this window.
 goto end
 
 :problem
