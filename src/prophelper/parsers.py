@@ -219,8 +219,8 @@ def _beds(text: str) -> float | None:
     for m in re.finditer(r"\b(\d)\s*(?:bd|br|bed)\s*[/|]\s*\d(?:\.\d)?\s*(?:ba|bth|bath)", low):
         hits.append((m.start(), float(m.group(1))))
     studio = re.search(r"\bstudio\b(?!\s*(?:apartments?\s*)?(?:are|is|also|available)\b)", low)
-    if studio and not re.search(r"\bno studio\b", low):
-        hits.append((studio.start(), 0.0))
+    if studio and not re.search(r"\bno studio\b", low) and not [h for h in hits if h[1] >= 1]:
+        hits.append((studio.start(), 0.0))  # "Studio-plus ... 1 bed" is a 1 bedroom; only a plain studio is 0
     hits = [h for h in hits if h[1] <= 20]
     return min(hits)[1] if hits else None
 
@@ -333,6 +333,8 @@ def _parking(text: str) -> tuple[str, float | None]:
         m = re.search(r"\$\s?(\d{2,4})\s*(?:/\s*mo(?:nth)?|per month|a month|monthly)?\s*(?:for |per )?(?:a |the )?(?:reserved |covered |garage |private )?(?:parking|garage|carport)\b(?!\s*deposit)", low)
         if m:
             cost = float(m.group(1))
+    if cost is None and re.search(r"\b(?:includes?|including)\s+(?:\w+[- ]?){0,2}parking\b|\bparking\s*[:\-][^.\n;]{0,30}\b(?:included|free)\b", low) and kind and kind != "none":
+        cost = 0.0
     if cost is None and re.search(r"\bfree (?:off[- ]?street |on[- ]?site |surface |assigned |resident |tenant )?parking\b|\bparking\s*(?:is\s*)?(?:included|free|at no (?:extra )?charge)\b|\bparking\s*[:\-]\s*(?:free|included)\b", low):
         cost = 0.0
     return kind, cost
@@ -410,13 +412,47 @@ _NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4}
 def _pet_deposit(text: str) -> tuple[float | None, str]:
     """A refundable pet deposit ("$400 refundable pet deposit"), kept apart from the one-time pet fee: it comes back,
     so it counts only as cash needed at move-in. Returns (amount, text with that phrase blanked so _pet_fees skips it)."""
-    pats = (r"\$\s?(\d{1,4})(?:\.\d\d)?[ \t]*(?<!non-)(?<!non )\brefundable[ \t]+pet[ \t]+deposit",
-            r"\bpet[ \t]+deposit[ \t]*[:\-]?[ \t]*\$\s?(\d{1,4})(?:\.\d\d)?[ \t]*\(?(?<!non-)(?<!non )\brefundable")
+    pats = (r"\$\s?(\d{1,4})(?:\.\d\d)?[ \t]*(?:one[- ]time[ \t]+)?(?:refundable[ \t]+)?pet[ \t]+deposit\b",
+            r"\bpet[ \t]+deposit[ \t]*[:\-]?[ \t]*\$\s?(\d{1,4})(?:\.\d\d)?\b(?!/)")
     for pat in pats:
-        m = re.search(pat, text, re.I)
-        if m:
+        for m in re.finditer(pat, text, re.I):
+            around = text[max(0, m.start() - 14):m.start()] + " " + text[m.start():m.end() + 28]
+            if re.search(r"non[- ]?refundable", around, re.I):
+                continue  # a non-refundable pet deposit is a fee, not money that comes back
             return float(m.group(1)), text[:m.start()] + " " * (m.end() - m.start()) + text[m.end():]
     return None, text
+
+
+_PET_WORD = re.compile(r"\b(?:pets?|cats?|dogs?|animals?|kittens?|puppy|puppies)\b", re.I)
+
+
+def _pet_side_deposits(text: str, rent: float | None) -> tuple[dict[str, float], str]:
+    """A "$250 deposit non-refundable" written next to the pets is a pet charge, never the security deposit. Returns
+    ({"pet_fee" or "pet_deposit": amount}, text with those amounts blanked so the security deposit search skips them)."""
+    found: dict[str, float] = {}
+    blanked = text
+    pat = (r"\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d\d)?[ \t]*(?:/[ \t]*mo(?:nth)?[ \t]*)?(?:one[- ]time[ \t]+|non[- ]?refundable[ \t]+|refundable[ \t]+)?(security[ \t]+|damage[ \t]+|pet[ \t]+|holding[ \t]+|key[ \t]+|parking[ \t]+)?deposits?\b"
+           r"|\bdeposits?\b[ \t:\-=(]{0,4}(?:of[ \t]+)?\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d\d)?")
+    for m in re.finditer(pat, text, re.I):
+        if m.group(2) or re.search(r"(?:security|damage|pet|holding|key|parking)[ \t]+$", text[max(0, m.start() - 12):m.start()], re.I):
+            continue  # "security deposit", "pet deposit" and so on name themselves
+        amount = _num(m.group(1) or m.group(3))
+        if rent and amount >= rent * 0.9:
+            continue  # as big as a month's rent: that is the security deposit
+        nonref = bool(re.search(r"non[- ]?refundable", text[max(0, m.start() - 20):m.end() + 25], re.I))
+        before = text[max(0, m.start() - 80):m.start()]
+        after = text[m.end():m.end() + 40]
+        if nonref:
+            pet = bool(_PET_WORD.search(before) or _PET_WORD.search(re.split(r"[.!?;\n]", after)[0]))
+        else:
+            near_before = re.split(r"[,.!?;\n]", before)[-1]
+            near_after = re.split(r"[,.!?;\n]", after)[0]
+            pet = bool(_PET_WORD.search(near_before) or _PET_WORD.search(near_after))
+        if not pet:
+            continue
+        found.setdefault("pet_fee" if nonref else "pet_deposit", amount)
+        blanked = blanked[:m.start()] + " " * (m.end() - m.start()) + blanked[m.end():]
+    return found, blanked
 
 
 def _pet_limit_fields(text: str) -> dict[str, Any]:
@@ -434,6 +470,16 @@ def _pet_limit_fields(text: str) -> dict[str, Any]:
         count = int(v) if v.isdigit() else _NUM_WORDS[v]
         if count >= 1:
             out["pet_count_limit"] = count
+    if "pet_count_limit" not in out:
+        for sentence in re.split(r"[.\n;]", text):
+            if _PET_WORD.search(sentence):
+                cm = re.search(r"\b(\d|one|two|three|four)\s+max(?:imum)?\b(?!\s*(?:occupants?|people|residents?|adults?|tenants?))", sentence, re.I)
+                if cm:
+                    v = cm.group(1).lower()
+                    count = int(v) if v.isdigit() else _NUM_WORDS[v]
+                    if count >= 1:
+                        out["pet_count_limit"] = count
+                        break
     b = re.search(r"[^.\n;]*\b(?:breed|breeds|breed restrictions?)\b[^.\n;]*", text, re.I)
     if b:
         clause = " ".join(b.group(0).split()).strip(" -:,")
@@ -469,6 +515,17 @@ def _app_fee_per_person(text: str) -> str:
     return f"The application fee{amount} is charged per {who}, so each adult who applies pays it."
 
 
+def app_fee_note_for_people(values: dict[str, Any], people: int) -> dict[str, Any]:
+    """For the Add preview only: when the application fee is charged per adult and the search has several people, say what
+    all of them pay together. The ``application_fee`` field itself stays the one-person amount. Returns ``values`` (changed
+    in place) so a caller can chain it."""
+    note = values.get("found_in_listing") or ""
+    fee = values.get("application_fee")
+    if people > 1 and isinstance(fee, (int, float)) and fee > 0 and "is charged per" in note and "together" not in note:
+        values["found_in_listing"] = note + f" For {people} people that is ${fee * people:,.0f} together."
+    return values
+
+
 def _move_in_months(text: str) -> tuple[int, bool]:
     """(months of rent due at move-in, deposit also due) from "first and last month" or "first, last and deposit"."""
     m = re.search(r"\b(?:first|1st)\b(?:\s+month(?:'?s)?(?:\s+rent)?)?\s*(?:,|and|&|\+|/)\s*(?:and\s+)?\blast\b(?:\s+month(?:'?s)?(?:\s+rent)?)?"
@@ -476,6 +533,43 @@ def _move_in_months(text: str) -> tuple[int, bool]:
     if not m:
         return 0, False
     return 2, bool(m.group(1))
+
+
+_WORD_NUM = {"one": 1, "a": 1, "1": 1, "two": 2, "2": 2}
+
+
+def _deposit_in_months(text: str) -> int:
+    """The security deposit written as a number of months of rent ("security deposit one month", "deposit equal to one month's
+    rent"), as that number of months. 0 when the text gives none."""
+    for pat in (r"\b(?:security |damage )?deposits?\b[ \t:\-]{0,4}(?:is |of |equal to |equals |equivalent to |=)?[ \t]*(one|two|a|1|2)[- ]months?(?:'s?)?(?:[ \t]+(?:of[ \t]+)?rent)?\b",
+                r"\b(one|two|1|2)[- ]months?(?:'s?)?[ \t]+(?:security |damage )deposit\b"):
+        m = re.search(pat, text, re.I)
+        if m:
+            return _WORD_NUM[m.group(1).lower()]
+    return 0
+
+
+def _three_months_up_front(text: str) -> bool:
+    return bool(re.search(r"\b(?:three|3)[- ]months?(?:'s?)?(?:[ \t]+(?:of[ \t]+)?rent)?[^.\n]{0,30}\b(?:up[- ]?front|due (?:at|before|on|by)|at (?:signing|move[- ]?in|lease signing))", text, re.I)
+                or re.search(r"\b(?:up[- ]?front|due (?:at|before)|at (?:signing|move[- ]?in))[^.\n]{0,30}\b(?:three|3)[- ]months?", text, re.I))
+
+
+def _closing_costs(text: str) -> float | None:
+    """"Estimated closing costs $9,800" -> 9800."""
+    m = re.search(r"\bclosing costs?(?:\s+(?:est\w*\.?|estimate[d]?))?[ \t:\-=]{0,6}(?:of |about |around |approx\.? |~)?\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d\d)?(?!\d)", text, re.I) \
+        or re.search(r"\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?:\.\d\d)?[ \t]*(?:in |for )?(?:est\w*\.?[ \t]+)?closing costs?\b", text, re.I)
+    if not m:
+        return None
+    value = _num(m.group(1))
+    return value if 100 <= value <= 5_000_000 else None
+
+
+def _price_cut(text: str) -> float | None:
+    """The size of a price cut ("Price reduced $10,000", "reduced by $10,000"), never the new price ("reduced to $...")."""
+    m = re.search(r"\b(?:price[ \t]+(?:reduced|cut|drop(?:ped)?|reduction)|reduced|price[ \t]+change)[ \t:\-]*(?:by[ \t]+)?\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?!\d)", text, re.I)
+    if not m or re.search(r"\bto\s*$", text[max(0, m.start(1) - 8):m.start(1)], re.I):
+        return None
+    return _num(m.group(1))
 
 
 def _insurance(text: str) -> float | None:
@@ -624,8 +718,12 @@ def _utilities(text: str) -> str:
     if re.search(r"\ball[- ]utilities[- ](?:are[- ])?(?:included|paid|covered)|\butilities (?:are )?all included|\ball[- ]inclusive|\ball bills (?:paid|included)|\bincludes all utilities|\butilities (?:are )?(?:included|paid)\b(?! (?:for|in) )|\bincluded utilities\s*[:\-]\s*all", low) \
             and not re.search(r"\butilities\s*[:\-]?\s*(?:not|excluded)", low):
         return "all utilities included"
+    if re.search(r"\b(?:all )?utilities\s*(?:are )?included\s+in\s+(?:the\s+)?(?:rent|lease|price|monthly)\b|\butilities\s*:\s*(?:all\s+)?(?:included|paid)\b", low):
+        return "all utilities included"
     found: list[str] = []
     words = "|".join(re.escape(w) for w in _UTILITY_WORDS) + "|hot water|trash removal|garbage|sewage|electricity"
+    for m in re.finditer(r"\b(?:rent |lease |monthly rent )?includes?\s+((?:(?:" + words + r")\s*(?:,|/|&|and|\+)?\s*(?:and\s+)?){1,6})(?!\s*(?:fee|charge|deposit|\$))", low):
+        found += re.findall(words, m.group(1))
     for m in re.finditer(r"((?:(?:" + words + r")\s*(?:,|/|&|and|\+)?\s*(?:and\s+)?){1,6})\s*(?:(?:is|are)\s*)?(?:all\s*)?(?:included|paid|covered|provided)\b", low):
         found += re.findall(words, m.group(1))
     for m in re.finditer(r"\b(?:utilities included|included utilities|rent includes|includes|utilities)\s*[:\-]\s*([^\n.;]{0,60})", low):
@@ -647,6 +745,13 @@ def _tenant_pays(text: str) -> str:
         rest = m.group(1)
         found += re.findall(r"\b(?:" + words + r")\b", rest)
     return _ordered_utilities(found) if found else ""
+
+
+def _tenant_pays_choices(pays: str) -> str:
+    """The renter-pays words as the store's fixed list (electric, gas, water, trash, internet, heat), in that order."""
+    words = {w.strip() for w in pays.split(",")}
+    words = {"internet" if w in ("wifi", "cable") else "water" if w in ("hot water", "sewer") else w for w in words}
+    return ", ".join(w for w in ("electric", "gas", "water", "trash", "internet", "heat") if w in words)
 
 
 def _ordered_utilities(found: list[str]) -> str:
@@ -935,6 +1040,10 @@ def parse_listing(text: str = "", url: str = "") -> dict[str, Any]:
     put("pet_deposit", deposit_amount)
     for key, value in (_try(lambda: _pet_fees(fee_text)) or {}).items():
         put(key, value)
+    side, dep_text = _try(lambda: _pet_side_deposits(fee_text, out.get("price") if isinstance(out.get("price"), (int, float)) else None)) or ({}, fee_text)
+    for key, value in side.items():
+        if key not in out and not (key == "pet_fee" and "pet_fee" in out):
+            put(key, value)
     for key, value in (_try(lambda: _pet_limit_fields(text)) or {}).items():
         put(key, value)
     put("utilities_included", _try(lambda: _utilities(text)))
@@ -942,16 +1051,23 @@ def parse_listing(text: str = "", url: str = "") -> dict[str, Any]:
     if pays:
         # Nothing is included for these, so the monthly cost keeps its own estimate line (a guess), and the listing's words are kept.
         facts.append(f"Tenant pays {pays}.")
+        mapped = _tenant_pays_choices(pays)
+        if mapped:
+            put("tenant_pays", mapped)
     put("available_from", _try(lambda: _available(text)))
     put("lease_months", _try(lambda: _lease_months(text)))
     put("year_built", _try(lambda: _year_built(text)))
     facts += [f"{line.rstrip('.')}." for line in (_try(lambda: _pet_limits(text)) or [])]
 
     def fees() -> None:
-        dep = _money_after(text, r"(?:security |refundable |damage |rental )?deposits?", hi=50000, skip_before=r"(?:pet|parking|holding|reservation|key|application|garage)\s*$")
+        dep = _money_after(dep_text, r"(?:security |refundable |damage |rental )?deposits?", hi=50000, skip_before=r"(?:pet|parking|holding|reservation|key|application|garage)\s*$")
         dep = [v for v in dep if v is not None]
+        rent_now = out.get("price")
+        by_months = _deposit_in_months(text)
         if dep:
             put("deposit", dep[0])
+        elif by_months and isinstance(rent_now, (int, float)) and 200 <= rent_now <= 30000 and not _SALE_WORDS.search(text):
+            put("deposit", by_months * float(rent_now))  # "security deposit one month", "deposit equal to one month's rent"
         elif re.search(r"\b(?:no|zero|\$0) (?:security )?deposit|\bdeposit\s*[:\-]?\s*(?:\$0|none|waived|zero)\b", text, re.I):
             put("deposit", 0.0)
         app = _money_after(text, r"application(?: processing)? fees?|app(?:lication)? fee|screening fee|background check fee", hi=1000)
@@ -972,9 +1088,14 @@ def parse_listing(text: str = "", url: str = "") -> dict[str, Any]:
             put("other_monthly_fees", monthly)
         months, with_deposit = _try(lambda: _move_in_months(text)) or (0, False)
         rent = out.get("price")
-        if months and isinstance(rent, (int, float)) and 200 <= rent <= 30000 and not _SALE_WORDS.search(text):
+        first_last = months
+        if _three_months_up_front(text):
+            months = 3  # only when the listing really says three months of rent are due before move-in
+        if months and not _SALE_WORDS.search(text):
+            put("months_up_front", months)
+        if first_last and isinstance(rent, (int, float)) and 200 <= rent <= 30000 and not _SALE_WORDS.search(text):
             # First and last month are cash due at move-in, not a fee: money.cash_at_move_in shows them apart.
-            line = f"First and last month's rent (${months * float(rent):,.0f}) are due at move-in"
+            line = f"First and last month's rent (${first_last * float(rent):,.0f}) are due at move-in"
             if with_deposit:
                 line += ", plus a deposit" + ("." if out.get("deposit") else " (the listing gives no amount).")
             else:
@@ -1003,6 +1124,12 @@ def parse_listing(text: str = "", url: str = "") -> dict[str, Any]:
         est = _try(lambda: _estimated_payment(text))
         if est:
             facts.append(f"The listing estimates the payment at ${est:,.0f}/mo.")
+        closing = _try(lambda: _closing_costs(text))
+        if closing:
+            put("closing_costs", closing)
+        cut = _try(lambda: _price_cut(text))
+        if cut:
+            facts.append(f"Price reduced ${cut:,.0f}.")
         hoa = _try(lambda: _hoa(text))
         if hoa is not None:
             put("hoa", hoa)
