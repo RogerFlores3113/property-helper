@@ -1277,6 +1277,11 @@ class Store:
                 new_stage = norm
                 if by == "ai" and new_stage in AI_NEVER_ENTERS:
                     raise StageRuleError(f"{new_stage} is for the user to set. Ask the user to do this in the app.")
+                if by == "ai" and ai_move_problem(mode, st.FIRST_STAGE, new_stage):
+                    # the same rule as move_place, counted from Saved: one step forward, or Passed
+                    nxt = st.stages_for(mode)[1]
+                    raise StageRuleError(f"An AI moves a place one stage at a time, so a new place can be added as Saved, {nxt} or Passed, "
+                                         f"not {new_stage}. Add it as Saved and move it forward step by step, or ask the user.")
             now = now_iso()
             cols = {"search_id": search_id, "stage": new_stage, "stage_changed_at": now, "created_at": now,
                     "updated_at": now, **values}
@@ -1409,6 +1414,8 @@ class Store:
             return self.get_place(place_id)
         if by_ai:
             problem = ai_move_problem(mode, old, new, one_step=not auto)
+            if not problem and new == "Toured" and not auto:
+                problem = self._future_tour_problem(place_id)
             if problem:
                 raise StageRuleError(problem)
         now = now_iso()
@@ -1418,6 +1425,17 @@ class Store:
             self._add_event(place_id, "stage", f"Moved from {old} to {new}" + (f". {_text(note, 500)}" if note else ""),
                             now, "ai" if by_ai else "you")
         return self.get_place(place_id)
+
+    def _future_tour_problem(self, place_id: int) -> str:
+        """Why an AI may not mark a place Toured yet: its only tours (not cancelled) are still ahead. "" when it may
+        (no tours at all, or at least one that is done or already past)."""
+        now = now_iso()
+        tours = [t for t in self.list_tours(place_id) if t["status"] != "cancelled"]
+        if not tours or any(t["status"] == "done" or t["starts_at"] <= now for t in tours):
+            return ""
+        first = min(tours, key=lambda t: t["starts_at"])
+        from . import helpers  # local import: helpers imports this module
+        return f"That tour is on {helpers.day_text(first['starts_at'])}; move it to Toured after you go."
 
     def list_places(self, search_id: int | None = None, *, stage: str | Iterable[str] | None = None,
                     query: str | None = None, include_archived: bool = False, archived_only: bool = False,

@@ -27,12 +27,16 @@ from mcp.server.fastmcp.exceptions import ToolError
 from mcp.types import CallToolResult, TextContent, ToolAnnotations
 from pydantic import Field
 
+import re
+
 from . import commute as commute_mod
-from . import guards, helpers
+from . import compare as compare_mod
+from . import guards, helpers, scoring
 from . import stages as st
+from . import today as today_view
 from .enrich import enrich_place, enrich_places
-from .store import (AI_EVENT_TEXT_MAX, AI_NEVER_ENTERS, COMMUTE_MODES, CONTACT_LOG_KINDS, CONTACT_ROLES, CRITERION_KINDS, NotFound, Store,
-                    ai_move_problem, normalize_url, to_utc_iso)
+from .store import (AI_EVENT_TEXT_MAX, AI_NEVER_ENTERS, COMMUTE_MODES, CONTACT_LOG_KINDS, CONTACT_ROLES, CRITERION_KINDS, MAX_PEOPLE, NotFound,
+                    Store, _clean_target, ai_move_problem, normalize_url, to_utc_iso)
 
 INSTRUCTIONS = """\
 Property Helper keeps the user's own apartment or house hunt on their computer: every place they found, where it
@@ -106,7 +110,7 @@ PLACE_PARAMS: list[tuple[str, Any, str]] = [
     ("parking_cost", float | str, "Monthly parking cost"),
     ("pets", str, "cats, dogs, both or none"),
     ("pet_rent", float | str, "Monthly pet rent"), ("pet_fee", float | str, "One-time pet fee"),
-    ("utilities_included", str, "What the rent covers, in words (for example 'water and trash')"),
+    ("utilities_included", str | bool, "What the rent covers, in words (for example 'water and trash', or 'all utilities'). false means none"),
     ("utilities_estimate", float | str, "Monthly utilities the user would pay on top (only if you really know)"),
     ("year_built", int | str, ""),
     ("available_from", str, "Date, YYYY-MM-DD"), ("lease_start", str, "Date, YYYY-MM-DD"), ("lease_end", str, "Date, YYYY-MM-DD"),
@@ -226,16 +230,51 @@ def _is_blank(v: Any) -> bool:
     return v is None or (isinstance(v, str) and not v.strip())
 
 
+MODE_WORDS = {"rent": "renting", "buy": "buying"}
+
+
+def _plain(table: dict[str, str], value: Any) -> str:
+    """The plain word for a stored value (in_unit becomes "In the unit"), the same words the web pages use."""
+    return table.get(str(value), str(value).replace("_", " ")) if value not in (None, "") else ""
+
+
+def _mode_word(mode: Any) -> str:
+    return MODE_WORDS.get(str(mode), str(mode))
+
+
+def _per_person_text(e: dict[str, Any]) -> str:
+    """"$1,000 a month each for 2 people" when the search is shared by more than one person, else ''."""
+    n = int(e.get("people") or 1)
+    pp = e.get("per_person")
+    return f"{_money(pp)} a month each for {n} people" if n > 1 and pp is not None else ""
+
+
+_INCLUDES = re.compile(r"The listing includes: (.*)$", re.DOTALL)
+
+
+def _plain_note(note: Any) -> str:
+    """A cost line's note with "The listing includes: False" turned into a sentence."""
+    def fix(m: re.Match) -> str:
+        v = m.group(1).strip()
+        if v.lower() in ("", "false", "no", "none", "0", "n/a"):
+            return "Utilities: not included in the rent"
+        if v.lower() in ("true", "yes"):
+            return "Utilities: included in the rent"
+        return "The listing says the rent includes " + _t(v, "utilities included", 80)
+    return _INCLUDES.sub(fix, str(note))
+
+
 def _facts(p: dict[str, Any]) -> str:
     bits = [helpers.place_line(p)]
     if p.get("laundry"):
-        bits.append({"in_unit": "washer and dryer in the unit", "in_building": "laundry in the building", "hookups": "washer and dryer hookups only", "none": "no laundry"}[p["laundry"]])
+        bits.append({"in_unit": "washer and dryer in the unit", "in_building": "laundry in the building", "hookups": "washer and dryer hookups only",
+                     "none": "no laundry"}.get(p["laundry"], _plain(compare_mod.LAUNDRY_TEXT, p["laundry"]).lower()))
     if p.get("dishwasher") is not None:
         bits.append("dishwasher" if p["dishwasher"] else "no dishwasher")
     if p.get("parking"):
-        bits.append(f"parking: {p['parking']}")
+        bits.append(f"parking: {_plain(compare_mod.PARKING_TEXT, p['parking']).lower()}")
     if p.get("pets"):
-        bits.append(f"pets: {p['pets']}")
+        bits.append(f"pets: {_plain(compare_mod.PETS_TEXT, p['pets']).lower()}")
     if p.get("year_built"):
         bits.append(f"built {p['year_built']}")
     if p.get("available_from"):
@@ -253,6 +292,8 @@ def _cost_text(e: dict[str, Any]) -> str:
     if one:
         parts.append(f"fees spread {helpers.money(one['amount'])}")
     text = f"True monthly cost {helpers.money(cost['total'])}" + (" (" + " + ".join(parts) + ")" if len(parts) > 1 else "")
+    if _per_person_text(e):
+        text += "; " + _per_person_text(e)
     if cost["missing"]:
         text += "; missing: " + ", ".join(cost["missing"])
     return text + (". " + cost["notes"][0] if cost["notes"] and cost["mode"] == "buy" else "")
@@ -264,7 +305,8 @@ def _score_text(e: dict[str, Any]) -> str:
         return "Score: none yet (the search has no criteria)"
     items = s["items"]
     good = [_lab(i["label"], i["kind"]) for i in sorted(items, key=lambda i: -float(i["weight"] or 0)) if i["known"] and i["score"] >= 0.99][:2]
-    bad = [_t(i["detail"], "criterion detail", 90) for i in sorted(items, key=lambda i: -float(i["weight"] or 0)) if i["known"] and i["score"] < 0.5][:2]
+    bad = [_t(i.get("detail") or i.get("gap") or f"{i['value']} (wanted {i['target']})", "criterion detail", 90)
+           for i in sorted(items, key=lambda i: -float(i["weight"] or 0)) if i["known"] and i["score"] < 0.5 and (i.get("detail") or i.get("gap") or i.get("value"))][:2]
     why = [f"+ {g}" for g in good] + [f"- {b}" for b in bad]
     return f"Score {s['total']} ({e['band']})" + (": " + "; ".join(why) if why else "")
 
@@ -294,6 +336,8 @@ def _unknown_text(e: dict[str, Any]) -> str:
 def _commute_list(e: dict[str, Any]) -> list[str]:
     """The best commute to every anchor, each named (the name is fenced): the fastest mode, except the first anchor,
     which shows what the app's cards show."""
+    if e.get("commute_all") is not None:  # one per important place: the mode of its commute criterion, else the fastest
+        return [f"{_aname(c['anchor'])}: {c['label']}" for c in e["commute_all"]]
     top = e.get("top_commute")
     best: dict[Any, dict[str, Any]] = {}
     for c in e.get("commutes") or []:
@@ -313,19 +357,23 @@ def _line(e: dict[str, Any], search: dict[str, Any] | None = None) -> str:
     """One short line for a list: id, title, stage, cost, score, top commute."""
     score = "no score" if e["score_total"] is None else f"score {e['score_total']}"
     bits = [f"#{e['id']} {_title(e)} [{e['stage']}]", _money(e["cost_total"]) + "/mo true cost" if e["cost_total"] is not None else "cost unknown", score]
+    if _per_person_text(e):
+        bits.insert(2, _per_person_text(e))
+    if e["score"].get("fit") == "check_first":
+        bits.append("Check first: possible scam")
     c = _commute_text(e)
     if c:
         bits.append(c)
     if e["score"]["fails_dealbreaker"]:
         bits.append("FAILS " + _labs(e["score"]["failed"]))
-    if e["flags"]:
+    if e["flags"] and e["score"].get("fit") != "check_first":
         bits.append(f"{len(e['flags'])} thing{'s' if len(e['flags']) != 1 else ''} to check (possible scam signs)")
     if e.get("is_sample"):
         bits.append("sample")
     return ", ".join(bits)
 
 
-def _card(e: dict[str, Any]) -> list[str]:
+def _card(e: dict[str, Any], other_ways: bool = False) -> list[str]:
     """The short card of a place: facts, cost, score with reasons, deal-breakers, unknowns, commute, next date."""
     lines = [f"#{e['id']} {_title(e)} [{e['stage']}] in search {e['search_id']}"]
     if e.get("address") or e.get("city"):
@@ -338,9 +386,14 @@ def _card(e: dict[str, Any]) -> list[str]:
     unknown = _unknown_list(e)
     if unknown:
         lines.append("Unknowns to fill: " + _unknown_text(e))
-    commutes = [f"{_aname(c['anchor'])} by {c['mode']}: {c['label']}" for c in e["commutes"]]
+    commutes = _commute_list(e)
     if commutes:
         lines.append("Commutes: " + "; ".join(commutes[:12]))
+    if other_ways:
+        shown = {(c["anchor_id"], c["mode"]) for c in e.get("commute_all") or []}
+        more = [f"{_aname(c['anchor'])} {c['label']}" for c in e["commutes"] if (c["anchor_id"], c["mode"]) not in shown]
+        if more:
+            lines.append("Other ways: " + "; ".join(more[:8]))
     if e.get("next"):
         lines.append(f"Next: {e['next']['text']} ({e['next']['rel']})")
     if e["flags"]:
@@ -477,6 +530,8 @@ def build_server(store: Store) -> FastMCP:
         if bad:
             raise ValueError(f"{where}unknown field{'s' if len(bad) > 1 else ''} {', '.join(map(str, bad))}. "
                              f"Allowed: {', '.join(sorted(PLACE_KEYS | {'stage', 'commutes'}))}. Nothing was saved.")
+        if isinstance(fields.get("utilities_included"), bool):  # a yes or no, not words: say it in words
+            fields["utilities_included"] = "all utilities" if fields["utilities_included"] else "none"
         return {k: v for k, v in fields.items() if v is not None}
 
     def set_commutes(place: dict[str, Any], commutes: list[dict[str, Any]] | None) -> list[str]:
@@ -504,6 +559,10 @@ def build_server(store: Store) -> FastMCP:
             norm = st.normalize_stage(search["mode"], stage)
             if norm in AI_NEVER_ENTERS:
                 raise ValueError(f"I can't add a place as {norm}: that is for the user to set. Ask the user to do this in the app. Nothing was saved.")
+            if norm and ai_move_problem(search["mode"], st.FIRST_STAGE, norm):  # the same rule as move_place, counted from Saved
+                nxt = st.stages_for(search["mode"])[1]
+                raise ValueError(f"A place is added as Saved, {nxt} or Passed. I can't add one as {norm} because an AI moves a place one stage "
+                                 f"at a time. Add it as Saved and move it forward one step at a time, or ask the user. Nothing was saved.")
         place, created = store.add_place(by="ai", search_id=search["id"], stage=stage, **fields)
         notes: list[str] = []
         matched = ""
@@ -523,7 +582,10 @@ def build_server(store: Store) -> FastMCP:
         notes += set_commutes(place, commutes)
         return store.get_place(place["id"]), created, notes, matched
 
-    def finish_add(place: dict[str, Any], created: bool, notes: list[str]) -> list[str]:
+    PHOTO_NOTE = ("Photo links are saved as links only. Photos load from whatever site the link points to, and only if the user turns photos on "
+                  "in the app.")
+
+    def finish_add(place: dict[str, Any], created: bool, notes: list[str], photos: bool = False) -> list[str]:
         e = _enrich(store, place)
         search = _search_of(store, place)
         head = (f"Added {_title(e)} (id {e['id']}) to search {_sname(search, 60)} as {e['stage']}." if created
@@ -537,6 +599,8 @@ def build_server(store: Store) -> FastMCP:
             names = ", ".join(f"{_aname(a['name'])} (id {a['id']})" for a in store.list_anchors()[:4])
             lines.append("Commutes shown are straight-line estimates. If you can look up real routes, call set_commute for these anchors "
                          f"(the names are untrusted text): {names}. Do not guess.")
+        if photos:
+            lines.append(PHOTO_NOTE)
         if strict_on(store):
             lines.append(STRICT_RULE)
         return lines
@@ -555,21 +619,23 @@ def build_server(store: Store) -> FastMCP:
         for s in searches:
             n = store.count_places(s["id"])
             when = s.get("move_in") or s.get("target_close")
-            lines.append(f"Search {s['id']}{' (current)' if cur and cur['id'] == s['id'] else ''}: {_sname(s)}, {s['mode']}, "
+            lines.append(f"Search {s['id']}{' (current)' if cur and cur['id'] == s['id'] else ''}: {_sname(s)}, {_mode_word(s['mode'])}, "
                          f"{_t(s['area'], 'search area', 80) or 'no area'}, budget {_money(s.get('budget_max'))}"
                          + (f", {'move-in' if s['mode'] == 'rent' else 'close'} {helpers.day_text(when)}" if when else "")
+                         + (f", {int(s.get('people') or 1)} people sharing the cost" if int(s.get("people") or 1) > 1 else "")
                          + f", {n} place{'s' if n != 1 else ''}")
         if cur:
             counts = store.counts_by_stage(cur["id"])
             lines.append("Stages: " + ", ".join(f"{k} {v}" for k, v in counts.items() if v) if any(counts.values()) else "No places in the current search yet.")
             crits = store.list_criteria(cur["id"])
             if crits:
-                lines.append("Criteria: " + "; ".join(f"[{c['id']}] {_lab(c['label'], c['kind'])} (weight {c['weight']:g}"
+                actx = {"anchors": {a["id"]: a for a in store.list_anchors()}, "mode": cur["mode"]}
+                lines.append("Criteria: " + "; ".join(f"[{c['id']}] {_lab(c['label'] or scoring._auto_label(c['kind'], c['target'], actx), c['kind'])} (weight {c['weight']:g}"
                                                        f"{', deal-breaker' if c['dealbreaker'] else ''})" for c in crits))
             else:
                 lines.append("The current search has no criteria yet, so places have no score. update_search can add some.")
             es = [e for e in enrich_places(store, cur) if not e["hidden_by_dealbreaker"]]
-            es.sort(key=lambda e: -(e["score_total"] if e["score_total"] is not None else -1))
+            es.sort(key=lambda e: (e["score"].get("sort_group", 0), -(e["score_total"] if e["score_total"] is not None else -1), e["id"]))
             if es:
                 lines.append("Top places:")
                 lines += ["  " + _line(e) for e in es[:3]]
@@ -614,12 +680,13 @@ def build_server(store: Store) -> FastMCP:
             es = [e for e in es if e["cost_total"] is not None and e["cost_total"] <= max_cost]
         if min_score is not None:
             es = [e for e in es if e["score_total"] is not None and e["score_total"] >= min_score]
-        es.sort(key=lambda e: (bool(e["score"]["fails_dealbreaker"]), -(e["score_total"] if e["score_total"] is not None else -1), e["id"]))
+        es.sort(key=lambda e: (e["score"].get("sort_group", 1 if e["score"]["fails_dealbreaker"] else 0),
+                               -(e["score_total"] if e["score_total"] is not None else -1), e["id"]))
         total = len(es)
         shown = es[:max(1, min(int(limit), 100))]
-        head = f"{total} place{'s' if total != 1 else ''} in search {_sname(search, 60)} ({search['mode']})"
-        if any(e["score"]["fails_dealbreaker"] for e in es):
-            head += ", places that fail a deal-breaker are listed last with the reason"
+        head = f"{total} place{'s' if total != 1 else ''} in search {_sname(search, 60)} ({_mode_word(search['mode'])})"
+        if any(e["score"].get("fit", "fits") != "fits" for e in es):
+            head += ", places that fail a deal-breaker or need a check first (possible scam) are listed last with the reason"
         if hidden:
             head += f", {hidden} hidden by deal-breakers or by hand (include_hidden=true shows them)"
         lines = [head + ":" if total else head + ". Nothing matches."] + [_line(e) for e in shown]
@@ -632,8 +699,8 @@ def build_server(store: Store) -> FastMCP:
     def get_place(place_id: Annotated[int, Field(description="The place's id (list_places shows ids)")]) -> CallToolResult:
         """Everything about one place: facts, true monthly cost line by line, score with reasons, commutes, tours, people and timeline."""
         e = _enrich(store, _find_place(store, place_id))
-        lines = _card(e)
-        lines.append("Cost lines: " + "; ".join(f"{l['label']} {_money(l['amount'])}" + (f" ({l['note']})" if l.get("note") else "")
+        lines = _card(e, other_ways=True)
+        lines.append("Cost lines: " + "; ".join(f"{l['label']} {_money(l['amount'])}" + (f" ({_plain_note(l['note'])})" if l.get("note") else "")
                                                 for l in e["cost"]["lines"] if l["amount"] or l["amount"] is None))
         lines.append("Score by criterion: " + "; ".join(f"{_lab(i['label'], i['kind'])} {round(i['score'] * 100)}%" + ("" if i["known"] else " (unknown)")
                                                         for i in e["score"]["items"]))
@@ -667,7 +734,8 @@ def build_server(store: Store) -> FastMCP:
                                                          address=fields.get("address"), unit=fields.get("unit")):
             strict_check(1, batch=False)
         place, created, notes, _ = add_one(fields)
-        return reply("\n".join(finish_add(place, created, notes)), place_id=place["id"], created=created, stage=place["stage"])
+        return reply("\n".join(finish_add(place, created, notes, photos=bool(fields.get("photo_urls")))), place_id=place["id"], created=created,
+                     stage=place["stage"])
 
     add_place.__doc__ = ("Save a place from a listing, or update it if it is already saved (same link, or same address and unit in the same "
                          "search). Pass every fact you can read plus the full listing_text. Only empty fields are filled on a repeat. "
@@ -707,6 +775,8 @@ def build_server(store: Store) -> FastMCP:
             out.append({"id": place["id"], "created": created})
         added = sum(1 for o in out if o["created"])
         lines.insert(0, f"Added {added}, updated {len(out) - added}.")
+        if any(f.get("photo_urls") for f in cleaned):
+            lines.append(PHOTO_NOTE)
         if strict_on(store):
             lines.append(STRICT_RULE)
         return reply("\n".join(lines), places=out)
@@ -945,15 +1015,18 @@ def build_server(store: Store) -> FastMCP:
         es.sort(key=lambda e: order[e["id"]])
         rows: list[tuple[str, list[str]]] = [
             ("Stage", [e["stage"] for e in es]),
+            ("Fit", [compare_mod.FIT_TEXT.get(e["score"].get("fit", "fits"), "Yes") for e in es]),
             ("True monthly cost", [_money(e["cost_total"]) for e in es]),
+            *([("Per person (" + str(int(search.get("people") or 1)) + " people)", [_money(e.get("per_person")) for e in es])]
+              if int(search.get("people") or 1) > 1 else []),
             ("Score", ["none" if e["score_total"] is None else str(e["score_total"]) for e in es]),
             ("Deal-breakers", ["fails " + _labs(e["score"]["failed"]) if e["score"]["failed"] else
                                ("check " + _labs(e["score"]["check"]) if e["score"]["check"] else "ok") for e in es]),
             ("Size", [helpers.place_line(e) or "unknown" for e in es]),
-            ("Laundry", [e["laundry"] or "unknown" for e in es]),
+            ("Laundry", [_plain(compare_mod.LAUNDRY_TEXT, e["laundry"]) or "unknown" for e in es]),
             ("Dishwasher", ["unknown" if e["dishwasher"] is None else ("yes" if e["dishwasher"] else "no") for e in es]),
-            ("Parking", [e["parking"] or "unknown" for e in es]),
-            ("Pets", [e["pets"] or "unknown" for e in es]),
+            ("Parking", [_plain(compare_mod.PARKING_TEXT, e["parking"]) or "unknown" for e in es]),
+            ("Pets", [_plain(compare_mod.PETS_TEXT, e["pets"]) or "unknown" for e in es]),
             ("Built", [str(e["year_built"] or "unknown") for e in es]),
             ("Available", [helpers.day_text(e["available_from"]) if e["available_from"] else "unknown" for e in es]),
             ("Commutes (every anchor)", [_commute_text(e) or "unknown" for e in es]),
@@ -966,80 +1039,208 @@ def build_server(store: Store) -> FastMCP:
             if len(set(vals)) > 1:
                 differ.append(label)
         lines.append("Differences: " + (", ".join(differ) if differ else "none"))
-        priced = [e for e in es if e["cost_total"] is not None]
-        scored = [e for e in es if e["score_total"] is not None]
+        # Best-of lines never name a possible scam or a place that doesn't fit: only places that fit can win.
+        fitting = [e for e in es if e["score"].get("fit", "fits") == "fits"]
+        priced_all = [e for e in es if e["cost_total"] is not None]
+        priced = [e for e in fitting if e["cost_total"] is not None]
+        scored = [e for e in fitting if e["score_total"] is not None]
+        left_out = [e for e in es if e not in fitting]
         if priced:
             cheap = min(priced, key=lambda e: e["cost_total"])
-            lines.append(f"Lowest true monthly cost: #{cheap['id']} at {_money(cheap['cost_total'])}.")
+            lines.append(f"Lowest true monthly cost: #{cheap['id']} at {_money(cheap['cost_total'])} (of the places that fit).")
+            cheaper = [e for e in priced_all if e not in fitting and e["cost_total"] < cheap["cost_total"]]
+            if cheaper:
+                lines.append("Cheaper, but not a place to pick: " + ", ".join(f"#{e['id']} ({compare_mod.FIT_TEXT.get(e['score'].get('fit'), 'does not fit')})" for e in cheaper) + ".")
+        elif priced_all:
+            lines.append("No place here fits, so I am not naming a lowest-cost place.")
         if scored:
             best = max(scored, key=lambda e: e["score_total"])
-            lines.append(f"Highest score: #{best['id']} at {best['score_total']}.")
+            lines.append(f"Highest score: #{best['id']} at {best['score_total']} (of the places that fit).")
+        if left_out:
+            lines.append("Left out of the best-of lines because they don't fit or need a check first: " + ", ".join(f"#{e['id']}" for e in left_out) + ".")
         return reply("\n".join(lines), place_ids=[e["id"] for e in es], scores=[e["score_total"] for e in es], costs=[e["cost_total"] for e in es])
 
     @mcp.tool(annotations=READ)
-    def todays_list(days: Annotated[int, Field(description="How many days ahead to look for tours (default 7)")] = 7) -> CallToolResult:
-        """What needs attention: tours coming up, places waiting on a reply, dates in the next 14 days, new places to look at, and the application checklist."""
+    def todays_list(days: Annotated[int, Field(description="How many days ahead to look for tours and dates (default 14, the same as the Today page)")] = today_view.COMING_UP_DAYS) -> CallToolResult:
+        """What needs attention, the same as the Today page: the best fits right now, tours and dates coming up (14 days), places waiting on a reply, new places worth a look (possible scams and places that don't fit are left out), and the application checklist."""
         cur = store.current_search()
-        sid = cur["id"] if cur else None
         lines = [f"Today is {helpers.day_text(helpers.today(), True)}."]
         if cur is None:
             return reply(lines[0] + " There is no search yet. Call create_search.", tours=0)
-        tours = store.upcoming_tours(max(1, int(days)), search_id=sid)
-        lines.append(f"Tours in the next {max(1, int(days))} days:" + (" none." if not tours else ""))
+        days = max(1, int(days))
+        rows = enrich_places(store, cur)
+        fits = today_view.best_fits(rows)
+        lines.append("Best fits right now:" + (" none yet." if not fits else ""))
+        for p in fits:
+            each = f", {_per_person_text(p)}" if _per_person_text(p) else ""
+            lines.append(f"  - #{p['id']} {_title(p)} [{p['stage']}], score {p['score_total']}, {_money(p['cost_total'])}/mo true cost{each}")
+        tours = store.upcoming_tours(days, search_id=cur["id"])
+        lines.append(f"Tours in the next {days} days:" + (" none." if not tours else ""))
         for t in tours:
             lines.append(f"  - {helpers.local_time(t['starts_at'])}: {_t(t['title'])} (place {t['place_id']}, tour {t['id']}), {t['duration_minutes']} min"
                          + (f", with {_t(t['with_whom'], 'tour contact', 60)}" if t["with_whom"] else "")
                          + ". For prep, get_place and the tour checklist.")
-        waiting = store.waiting_on_reply()
+        dates = [c for c in today_view.coming_up(store, cur, rows, days) if c["kind"] != "tour"]
+        lines.append(f"Dates in the next {days} days:" + (" none." if not dates else ""))
+        for d in dates[:8]:
+            lines.append(f"  - {helpers.day_text(d['date'])}: {_t(d['label'], 'date label', 60)} at {_t(d['title'])}" + (f", {_t(d['note'], 'date note', 80)}" if d["note"] else ""))
+        waiting = today_view.waiting_rows(store, cur)
         lines.append("Waiting on a reply:" + (" none." if not waiting else ""))
         for w in waiting[:8]:
             pl = f" about {_t(w['place']['title'])}" if w.get("place") else ""
             lines.append(f"  - {_t(w['contact']['name'], 'contact name', 60)}{pl}: you wrote {w['days']} days ago. A nudge could help; ask the user before sending.")
-        dates = store.upcoming_dates(14, search_id=sid)
-        lines.append("Dates in the next 14 days:" + (" none." if not dates else ""))
-        for d in dates[:8]:
-            lines.append(f"  - {helpers.day_text(d['date'])}: {d['label']} at {_t(d['place']['title'])} (id {d['place']['id']})")
-        new = store.new_places(sid, limit=8)
+        new = today_view.new_places(store, cur)
         lines.append("New places the user has not looked at:" + (" none." if not new else ""))
-        for p in new:
+        for p in new[:8]:
             lines.append(f"  - #{p['id']} {_title(p)}")
+        late = today_view.late_availability(rows, cur)
+        for item in late:
+            lines.append(f"Heads up: {_title(item['place'])} (id {item['place']['id']}): {item['text']}.")
         if not store.list_criteria(cur["id"]):
             lines.append("This search has no criteria yet, so nothing is scored. update_search can add some from what the user told you.")
         todo = [c for c in store.list_checklist() if not c["done"]]
         if todo:
             lines.append(f"Application checklist: {len(todo)} item{'s' if len(todo) != 1 else ''} not done yet (" + ", ".join(_t(c['label'], 'checklist item', 40) for c in todo[:4]) + ("..." if len(todo) > 4 else "") + ").")
-        return reply("\n".join(lines), tours=len(tours), waiting=len(waiting), dates=len(dates), new_places=len(new))
+        return reply("\n".join(lines), tours=len(tours), waiting=len(waiting), dates=len(dates), new_places=len(new), best_fits=[p["id"] for p in fits])
 
     # ------------------------------------------------------------ searches
-    def add_criteria(search_id: int, items: list[dict[str, Any]] | None) -> list[str]:
-        out = []
-        for c in items or []:
-            if isinstance(c, dict) and "name" in c and "label" not in c:
-                c = {**{k: v for k, v in c.items() if k != "name"}, "label": c["name"]}  # "name" is accepted for "label"
-            if not isinstance(c, dict) or "kind" not in c:
-                raise ValueError(f"Each criterion needs a kind ({', '.join(CRITERION_KINDS)}), a weight and a target. Nothing more was saved.")
+    TARGET_KEYS = ("max", "min", "minutes", "anchor", "anchor_id", "mode", "want", "year")
+    KIND_TARGET = {"price": ("max",), "beds": ("min",), "baths": ("min",), "sqft": ("min",), "commute": ("anchor", "anchor_id", "mode", "minutes"),
+                   "laundry": ("want",), "parking": ("want",), "pets": ("want",), "newer": ("year",), "dishwasher": (), "custom": ()}
+    TARGET_EXAMPLE = {"max": "1600", "min": "1", "minutes": "15", "anchor": '"Campus"', "anchor_id": "1", "mode": '"bike"',
+                      "want": '"in_unit"', "year": "2015"}
+    CRIT_EXAMPLE = ('[{"kind": "price", "label": "Rent at most $1600", "weight": 80, "dealbreaker": true, "target": {"max": 1600}}, '
+                    '{"kind": "commute", "label": "Campus by bike", "weight": 60, "target": {"anchor": "Campus", "mode": "bike", "minutes": 15}}]')
+    WEIGHT_NOTE = ("weight is optional (10 when left out) and is a number from 0 to 100. "
+                   "A criterion looks like " + CRIT_EXAMPLE)
+    CRIT_DOC = ("criteria: list of {kind, label?, weight? (0-100, optional), dealbreaker?, target}. Kinds and targets: price {max}, beds/baths {min}, sqft {min}, "
+                "commute {anchor: name or id, mode, minutes}, laundry {want: in_unit|in_building}, dishwasher, parking {want?}, pets {want?}, "
+                "newer {year}, custom (the user scores it by hand). target is an OBJECT with only that kind's keys, not extra keys on the criterion. "
+                "label may also be passed as name, and kind as field. Price is checked against true monthly cost, so include utilities and fees. Example: " + CRIT_EXAMPLE)
+
+    def _say(v: Any, n: int = 40) -> str:
+        return guards.inline(v, n)
+
+    def check_anchors(items: Any, where: str = "Anchor") -> tuple[list[dict[str, Any]], list[str], list[str]]:
+        """Every anchor checked without saving anything: (clean items, problems, gentle notes)."""
+        clean: list[dict[str, Any]] = []
+        problems: list[str] = []
+        notes: list[str] = []
+        for i, a in enumerate(items or [], 1):
+            at = f"{where} {i}"
+            if not isinstance(a, dict):
+                problems.append(f"{at} needs to be an object like {{\"name\": \"Campus\", \"address\": \"...\", \"lat\": 40.1, \"lng\": -88.2}}")
+                continue
+            a = dict(a)
+            if not a.get("name") and a.get("label"):
+                a["name"] = a.pop("label")
+                notes.append(f"{at}: I read label as the anchor's name. Next time use name.")
+            if not str(a.get("name") or "").strip():
+                problems.append(f"{at} needs a name, like \"Campus\" or \"Work\"")
+                continue
+            extra = [k for k in a if k not in ("name", "address", "lat", "lng")]
+            if extra:
+                problems.append(f"{at} ({_say(a['name'])}) doesn't take {', '.join(_say(k) for k in extra)}; it takes name, address, lat and lng")
+                continue
+            try:
+                store._anchor_values({"name": a["name"], "address": a.get("address") or "", "lat": a.get("lat"), "lng": a.get("lng"), "is_sample": False}, False)  # noqa: SLF001
+            except ValueError as exc:
+                problems.append(f"{at} ({_say(a['name'])}): {exc}")
+                continue
+            clean.append(a)
+        return clean, problems, notes
+
+    def check_criteria(items: Any, pending: set[str], where: str = "Criterion") -> tuple[list[dict[str, Any]], list[str], list[str]]:
+        """Every criterion checked without saving anything: (clean items, problems, gentle notes). ``pending`` are the
+        lower-case names of anchors that will be saved first, so a criterion may point at them."""
+        clean: list[dict[str, Any]] = []
+        problems: list[str] = []
+        notes: list[str] = []
+        for i, c in enumerate(items or [], 1):
+            at = f"{where} {i}"
+            if not isinstance(c, dict):
+                problems.append(f"{at} needs to be an object like {CRIT_EXAMPLE.split('}, ')[0]}}}")
+                continue
+            c = dict(c)
+            if "kind" not in c and "field" in c:
+                c["kind"] = c.pop("field")
+                notes.append(f"{at}: I read field as the criterion's kind. Next time use kind.")
+            if "name" in c and "label" not in c:
+                c["label"] = c.pop("name")
+            if "kind" not in c:
+                problems.append(f"{at} needs a kind (one of {', '.join(CRITERION_KINDS)})")
+                continue
+            kind = str(c["kind"]).strip().lower()
+            at = f"{at} ({kind})"
+            if kind not in CRITERION_KINDS:
+                problems.append(f"{at}: kind must be one of {', '.join(CRITERION_KINDS)}")
+                continue
+            c["kind"] = kind
+            bad = False
             extra = [k for k in c if k not in ("kind", "label", "weight", "dealbreaker", "target")]
             if extra:
                 inside = [k for k in extra if k in TARGET_KEYS]
-                hint = (f" {', '.join(inside)} belongs inside target, for example \"target\": {{\"{inside[0]}\": 1600}}." if inside else "")
-                raise ValueError(f"A criterion doesn't take {', '.join(map(str, extra))}.{hint} Allowed: kind, label (or name), weight, "
-                                 "dealbreaker, target (an object). Example: " + CRIT_EXAMPLE + " Nothing more was saved.")
+                hint = (f" {', '.join(inside)} belongs inside target, for example \"target\": {{\"{inside[0]}\": {TARGET_EXAMPLE[inside[0]]}}}." if inside else "")
+                problems.append(f"{at} doesn't take {', '.join(_say(k) for k in extra)}.{hint} A criterion takes kind, label (or name), weight, dealbreaker and target (an object)")
+                bad = True
+            if c.get("weight") is not None:
+                try:
+                    Store._weight(c["weight"])  # noqa: SLF001
+                except ValueError:
+                    problems.append(f"{at}: weight must be a number from 0 to 100 (it is optional, and 10 when left out)")
+                    bad = True
+            target = c.get("target")
+            if isinstance(target, dict):
+                target = dict(target)
+                keys = KIND_TARGET.get(kind, ())
+                wrong = [k for k in target if k not in keys]
+                if wrong:
+                    problems.append(f"{at}: target takes {', '.join(keys) or 'nothing'} for this kind, not {', '.join(_say(k) for k in wrong)}")
+                    bad = True
+                if "anchor" in target:
+                    ref = str(target["anchor"]).strip()
+                    try:
+                        target["anchor_id"] = _anchor(store, ref)["id"]
+                    except ValueError:
+                        if ref.lower() in pending:
+                            target["anchor_id"] = 0
+                        else:
+                            have = ", ".join(_say(a["name"], 40) for a in store.list_anchors()) or "none saved yet"
+                            problems.append(f"{at}: there is no anchor called {_say(ref)}. Saved anchors: {have}. Add it in anchors first")
+                            bad = True
+                    target.pop("anchor", None)
+            try:
+                if not bad:
+                    _clean_target(kind, target)
+            except ValueError as exc:
+                problems.append(f"{at}: {exc}")
+                bad = True
+            if not bad:
+                clean.append(c)
+        return clean, problems, notes
+
+    def stop_with(problems: list[str], what: str) -> None:
+        if problems:
+            body = "; ".join(f"{n}) {p}" for n, p in enumerate(problems, 1)) if len(problems) > 1 else problems[0]
+            raise ValueError(f"Nothing was {what}. Fix {'these' if len(problems) > 1 else 'this'} and send it again: {body}. Notes: {WEIGHT_NOTE}")
+
+    def add_criteria(search_id: int, items: list[dict[str, Any]] | None) -> list[str]:
+        """Save criteria that check_criteria already accepted."""
+        out = []
+        for c in items or []:
             target = dict(c.get("target") or {}) if isinstance(c.get("target"), dict) else c.get("target")
             if isinstance(target, dict) and "anchor" in target:
                 target["anchor_id"] = _anchor(store, target.pop("anchor"))["id"]
             row = store.add_criterion(search_id, c["kind"], label=c.get("label") or "", weight=c.get("weight", 10),
                                       dealbreaker=c.get("dealbreaker", False), target=target)
-            out.append(f"[{row['id']}] {_lab(row['label'], row['kind'])} (weight {row['weight']:g}{', deal-breaker' if row['dealbreaker'] else ''})")
+            out.append(f"[{row['id']}] {_lab(row['label'] or scoring._auto_label(row['kind'], row['target'], {'anchors': {a['id']: a for a in store.list_anchors()}, 'mode': store.get_search(search_id)['mode']}), row['kind'])} "
+                       f"(weight {row['weight']:g}{', deal-breaker' if row['dealbreaker'] else ''})")
         return out
 
     def add_anchors(items: list[dict[str, Any]] | None) -> list[str]:
+        """Save anchors that check_anchors already accepted."""
         out = []
         for a in items or []:
-            if not isinstance(a, dict) or not a.get("name"):
-                raise ValueError("Each anchor needs a name, like 'Campus' or 'Work', and can have address, lat and lng.")
-            extra = [k for k in a if k not in ("name", "address", "lat", "lng")]
-            if extra:
-                raise ValueError(f"An anchor doesn't take {', '.join(extra)}. Allowed: name, address, lat, lng.")
             old = next((x for x in store.list_anchors() if x["name"].lower() == str(a["name"]).strip().lower()), None)
             if old:
                 fill = {k: a[k] for k in ("address", "lat", "lng") if a.get(k) not in (None, "") and old.get(k) in (None, "")}
@@ -1051,14 +1252,6 @@ def build_server(store: Store) -> FastMCP:
                 out.append(f"{_aname(row['name'])} (id {row['id']}, added" + ("" if row.get("lat") is not None else "; no coordinates yet, so no commute times until you or the user add them") + ")")
         return out
 
-    TARGET_KEYS = ("max", "min", "minutes", "anchor", "anchor_id", "mode", "want", "year")
-    CRIT_EXAMPLE = ('[{"kind": "price", "label": "Rent at most $1600", "weight": 80, "dealbreaker": true, "target": {"max": 1600}}, '
-                    '{"kind": "commute", "label": "Campus by bike", "weight": 60, "target": {"anchor": "Campus", "mode": "bike", "minutes": 15}}]')
-    CRIT_DOC = ("criteria: list of {kind, label?, weight 0-100, dealbreaker?, target}. Kinds and targets: price {max}, beds/baths {min}, sqft {min}, "
-                "commute {anchor: name or id, mode, minutes}, laundry {want: in_unit|in_building}, dishwasher, parking {want?}, pets {want?}, "
-                "newer {year}, custom (the user scores it by hand). target is an OBJECT with only that kind's keys, not extra keys on the criterion. "
-                "label may also be passed as name. Price is checked against true monthly cost, so include utilities and fees. Example: " + CRIT_EXAMPLE)
-
     @mcp.tool(annotations=WRITE)
     def create_search(name: Annotated[str, Field(description="For example 'UIUC 1-bed 2027-28'")],
                       mode: Annotated[str, Field(description="rent or buy")] = "rent",
@@ -1066,25 +1259,35 @@ def build_server(store: Store) -> FastMCP:
                       move_in: Annotated[str | None, Field(description="rent: move-in date, YYYY-MM-DD")] = None,
                       target_close: Annotated[str | None, Field(description="buy: target closing date, YYYY-MM-DD")] = None,
                       budget_max: Annotated[float | None, Field(description="Most per month in true monthly cost (rent) or most to pay (buy)")] = None,
+                      people: Annotated[int | None, Field(description=f"How many people share the cost (1 to {MAX_PEOPLE}, default 1). With more than one, places show a per-person monthly cost")] = None,
                       notes: Annotated[str | None, Field(description="What the user told you about this hunt")] = None,
                       criteria: Annotated[list[dict[str, Any]] | None, Field(description="Weighted criteria. " + CRIT_DOC)] = None,
                       anchors: Annotated[list[dict[str, Any]] | None, Field(description="Places to measure commutes to: [{name, address, lat, lng}]. Reuses one with the same name")] = None) -> CallToolResult:
-        """Start a new search with optional criteria and anchors. The first search becomes the current one; otherwise the user picks it in the app."""
-        fields = {k: v for k, v in (("area", area), ("move_in", move_in), ("target_close", target_close), ("budget_max", budget_max), ("notes", notes)) if v is not None}
-        s = store.add_search(name, mode, **fields)
+        """Start a new search with optional criteria and anchors. All or nothing: if anything in it is wrong, nothing is saved and the reply says what to fix. The first search becomes the current one; otherwise the user picks it in the app."""
+        fields = {k: v for k, v in (("area", area), ("move_in", move_in), ("target_close", target_close), ("budget_max", budget_max),
+                                    ("people", people), ("notes", notes)) if v is not None}
+        problems: list[str] = []
         try:
-            a_lines = add_anchors(anchors)
-            c_lines = add_criteria(s["id"], criteria)
+            store._search_values({**fields, "name": name, "mode": mode}, partial=False)  # noqa: SLF001
         except ValueError as exc:
-            raise ValueError(f"The search was saved as id {s['id']} but: {exc}") from None
+            problems.append(str(exc))
+        a_clean, a_probs, a_notes = check_anchors(anchors)
+        c_clean, c_probs, c_notes = check_criteria(criteria, {str(a["name"]).strip().lower() for a in a_clean})
+        stop_with(problems + a_probs + c_probs, "saved")
+        s = store.add_search(name, mode, **fields)
+        a_lines = add_anchors(a_clean)
+        c_lines = add_criteria(s["id"], c_clean)
         cur = store.current_search()
-        lines = [f"Created search {s['id']} {_sname(s)} ({s['mode']})" + ("." if cur and cur["id"] == s["id"] else ". It is not the current search; the user can switch on the Search page. Pass search_id to add_place to use it.")]
+        lines = [f"Created search {s['id']} {_sname(s)} ({_mode_word(s['mode'])})" + ("." if cur and cur["id"] == s["id"] else ". It is not the current search; the user can switch on the Search page. Pass search_id to add_place to use it.")]
+        if int(s.get("people") or 1) > 1:
+            lines.append(f"Shared by {s['people']} people, so places show a per-person monthly cost.")
         if a_lines:
             lines.append("Anchors: " + "; ".join(a_lines))
         if c_lines:
             lines.append("Criteria: " + "; ".join(c_lines))
         else:
             lines.append("No criteria yet, so places won't be scored. update_search can add them.")
+        lines += a_notes + c_notes
         return reply("\n".join(lines), search_id=s["id"], current=bool(cur and cur["id"] == s["id"]))
 
     @mcp.tool(annotations=WRITE)
@@ -1094,43 +1297,76 @@ def build_server(store: Store) -> FastMCP:
                       move_in: Annotated[str | None, Field(description="YYYY-MM-DD")] = None,
                       target_close: Annotated[str | None, Field(description="YYYY-MM-DD")] = None,
                       budget_max: Annotated[float | None, Field(description="")] = None,
+                      people: Annotated[int | None, Field(description=f"How many people share the cost (1 to {MAX_PEOPLE}). With more than one, places show a per-person monthly cost")] = None,
                       add_criteria_list: Annotated[list[dict[str, Any]] | None, Field(description="New criteria to add, each {kind, label, weight, dealbreaker, target}, where target is an object such as {\"max\": 1600}. " + CRIT_DOC)] = None,
                       reweight: Annotated[list[dict[str, Any]] | None, Field(description="Change existing criteria: [{id, weight?, dealbreaker?, target?, label?}]. Criteria can't be removed")] = None,
                       add_anchors_list: Annotated[list[dict[str, Any]] | None, Field(description="Anchors to add or fill in: [{name, address, lat, lng}]")] = None) -> CallToolResult:
-        """Change a search: its name, area, dates, budget, criteria (add or reweight, never remove) and anchors. A criterion can't be removed; the user does that in the app.
+        """Change a search: its name, area, dates, budget, people sharing the cost, criteria (add or reweight, never remove) and anchors. A criterion can't be removed; the user does that in the app. All or nothing: if anything is wrong, nothing is changed and the reply says what to fix.
         To add criteria pass add_criteria_list as a list of objects: {"kind": "price", "label": "Rent at most $1600", "weight": 80, "dealbreaker": true, "target": {"max": 1600}}.
         target is an object with the kind's keys (price {max}; beds, baths, sqft {min}; commute {anchor, mode, minutes}; laundry {want}; newer {year}). "name" works as an alias for "label"."""
         s = _search_for(store, search_id)
-        fields = {k: v for k, v in (("name", name), ("area", area), ("move_in", move_in), ("target_close", target_close), ("budget_max", budget_max)) if v is not None}
+        fields = {k: v for k, v in (("name", name), ("area", area), ("move_in", move_in), ("target_close", target_close), ("budget_max", budget_max),
+                                    ("people", people)) if v is not None}
+        if not (fields or add_anchors_list or add_criteria_list or reweight):
+            raise ValueError("Nothing to change. Pass name, area, move_in, target_close, budget_max, people, add_criteria_list, reweight or add_anchors_list.")
+        problems: list[str] = []
+        try:
+            store._search_values(fields, partial=True)  # noqa: SLF001
+        except ValueError as exc:
+            problems.append(str(exc))
+        a_clean, a_probs, a_notes = check_anchors(add_anchors_list)
+        c_clean, c_probs, c_notes = check_criteria(add_criteria_list, {str(a["name"]).strip().lower() for a in a_clean})
+        problems += a_probs + c_probs
+        valid = {c["id"]: c for c in store.list_criteria(s["id"])}
+        r_clean: list[dict[str, Any]] = []
+        for n, r in enumerate(reweight or [], 1):
+            at = f"reweight {n}"
+            if not isinstance(r, dict) or "id" not in r:
+                problems.append(f"{at} needs the criterion's id and what to change (weight, dealbreaker, target, label)")
+                continue
+            extra = [k for k in r if k not in ("id", "weight", "dealbreaker", "target", "label")]
+            if extra:
+                problems.append(f"{at} doesn't take {', '.join(_say(k) for k in extra)}. Allowed: id, weight, dealbreaker, target, label (criteria can't be removed)")
+                continue
+            try:
+                cid = int(r["id"])
+            except (TypeError, ValueError):
+                cid = -1
+            if cid not in valid:
+                problems.append(f"{at}: criterion {_say(r['id'])} is not in search {s['id']}. get_overview lists the criteria ids")
+                continue
+            ch = {k: v for k, v in r.items() if k != "id"}
+            try:
+                if "weight" in ch:
+                    Store._weight(ch["weight"])  # noqa: SLF001
+                if isinstance(ch.get("target"), dict):
+                    t = dict(ch["target"])
+                    if "anchor" in t:
+                        t["anchor_id"] = _anchor(store, t.pop("anchor"))["id"]
+                    ch["target"] = t
+                    _clean_target(valid[cid]["kind"], t)
+            except ValueError as exc:
+                problems.append(f"{at}: {exc}")
+                continue
+            r_clean.append({"id": cid, **ch})
+        stop_with(problems, "changed")
         notes: list[str] = []
         if fields:
             s = store.update_search(s["id"], **fields)
             notes.append("Changed " + ", ".join(k.replace("_", " ") for k in fields) + ".")
-        a_lines = add_anchors(add_anchors_list)
+        a_lines = add_anchors(a_clean)
         if a_lines:
             notes.append("Anchors: " + "; ".join(a_lines))
-        valid = {c["id"] for c in store.list_criteria(s["id"])}
-        for r in reweight or []:
-            if not isinstance(r, dict) or "id" not in r:
-                raise ValueError("Each reweight entry needs the criterion's id and what to change (weight, dealbreaker, target, label).")
-            extra = [k for k in r if k not in ("id", "weight", "dealbreaker", "target", "label")]
-            if extra:
-                raise ValueError(f"reweight doesn't take {', '.join(extra)}. Allowed: id, weight, dealbreaker, target, label (criteria can't be removed).")
-            if int(r["id"]) not in valid:
-                raise ValueError(f"Criterion {r['id']} is not in search {s['id']}. get_overview lists the criteria ids.")
+        for r in r_clean:
             if len(r) == 1:
                 continue
             ch = {k: v for k, v in r.items() if k != "id"}
-            if isinstance(ch.get("target"), dict) and "anchor" in ch["target"]:
-                ch["target"] = {**ch["target"], "anchor_id": _anchor(store, ch["target"]["anchor"])["id"]}
-                ch["target"].pop("anchor", None)
-            row = store.update_criterion(int(r["id"]), **ch)
+            row = store.update_criterion(r["id"], **ch)
             notes.append(f"Changed [{row['id']}] {_lab(row['label'], row['kind'])}: weight {row['weight']:g}{', deal-breaker' if row['dealbreaker'] else ''}.")
-        c_lines = add_criteria(s["id"], add_criteria_list)
+        c_lines = add_criteria(s["id"], c_clean)
         if c_lines:
             notes.append("Added criteria: " + "; ".join(c_lines))
-        if not notes:
-            raise ValueError("Nothing to change. Pass name, area, move_in, target_close, budget_max, add_criteria_list, reweight or add_anchors_list.")
+        notes += a_notes + c_notes
         if a_lines or c_lines or reweight:
             hidden = sum(1 for e in enrich_places(store, s) if e["hidden_by_dealbreaker"])
             if hidden:

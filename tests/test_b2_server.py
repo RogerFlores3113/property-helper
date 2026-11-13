@@ -254,7 +254,7 @@ def test_add_tour_moves_forward_and_does_not_contact_anyone(srv, store):
     past = call(srv, "add_tour", place_id=pid2, starts_at="2020-01-01 10:00")
     assert "already passed" in text(past)
     assert store.get_place(pid)["stage"] == "Tour booked"
-    pid3 = structured(add(srv, title="T3", address="13 T St", stage="Applied"))["place_id"]
+    pid3 = store.add_place(title="T3", address="13 T St", stage="Applied")[0]["id"]  # the user may add at any stage
     call(srv, "add_tour", place_id=pid3, starts_at="2027-03-01 10:00")
     assert store.get_place(pid3)["stage"] == "Applied"  # never backward
 
@@ -336,7 +336,8 @@ def test_create_search_second_one_is_not_current_and_bad_input_is_clear(store, s
     assert store.current_search()["name"].startswith("UIUC")
     assert "rent or buy" in err(srv, "create_search", name="X", mode="lease")
     msg = err(srv, "create_search", name="Y", criteria=[{"kind": "price", "foo": 1}])
-    assert "doesn't take foo" in msg and "saved as id" in msg
+    assert "doesn't take foo" in msg and "Nothing was saved" in msg  # all or nothing (cycle 2)
+    assert not [x for x in store.list_searches() if x["name"] == "Y"]
 
 
 def test_compare_places_side_by_side(srv):
@@ -366,7 +367,7 @@ def test_todays_list_and_overview(store):
     load_sample_data(store)
     store.update_search(store.current_search()["id"], hide_dealbreakers=True)
     out = text(call(s, "todays_list"))
-    assert "Tours in the next 7 days:" in out and "Maple Row Flats" in out and "Waiting on a reply:" in out
+    assert "Tours in the next 14 days:" in out and "Maple Row Flats" in out and "Waiting on a reply:" in out
     assert "New places the user has not looked at:" in out and "Application checklist: 8 items" in out
     ov = text(call(s, "get_overview"))
     assert "(current)" in ov and "Top places:" in ov and "hidden by deal-breakers" in ov and "Anchors" in ov
@@ -478,7 +479,7 @@ def test_the_ai_never_writes_into_the_users_notes_anywhere(srv, store):
     call(srv, "add_note", place_id=pid, text="b")
     call(srv, "add_place", address="1 Safe St", ai_notes="c")
     call(srv, "set_location", place_id=pid, lat=40, lng=-88)
-    call(srv, "add_tour", place_id=pid, starts_at="2027-05-01 10:00")
+    call(srv, "add_tour", place_id=pid, starts_at="2026-05-01 10:00")  # a tour that already happened
     call(srv, "move_place", place_id=pid, stage="Toured")
     assert store.get_place(pid)["notes"] == "OWN"
 
