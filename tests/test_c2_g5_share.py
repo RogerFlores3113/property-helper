@@ -69,7 +69,7 @@ def test_share_page_has_cash_commute_and_scam_marks(client, store):
     b, _ = store.add_place(search_id=s["id"], title="Real Flat", address="7 Elm St", price=1400, deposit=1400)
     store.set_commute(a["id"], anchor["id"], "bike", 10)
     html = client.get(f"/compare/share.html?ids={a['id']}&ids={b['id']}").text
-    assert "Cash needed on move-in day" in html and "To Campus" in html
+    assert "Cash needed at move-in" in html and "To Campus" in html
     assert "possible scam" in html.lower() and "Per person" in html
 
 

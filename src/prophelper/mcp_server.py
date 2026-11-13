@@ -1117,8 +1117,22 @@ def build_server(store: Store) -> FastMCP:
             ("Built", [str(e["year_built"] or "unknown") for e in es]),
             ("Available", [helpers.day_text(e["available_from"]) if e["available_from"] else "unknown" for e in es]),
             ("Commutes (every anchor)", [_commute_text(e) or "unknown" for e in es]),
-            ("Still unknown", [_unknown_text(e) or "nothing" for e in es]),
         ]
+        # Money up front (a renter's move-in cash says when the deposit is not known; a buyer's says what it counts),
+        # the special assessment and days on the market for buyers, and each named person's rating.
+        up_front = [compare_mod._cash_cell(e) for e in es]
+        if not all(c["unknown"] for c in up_front):
+            rows.append(("Cash needed up front", [c["text"] for c in up_front]))
+        if any(e["cost"].get("mode") == "buy" for e in es):
+            rows.append(("Special assessment (who pays it)", [compare_mod._assessment_cell(e)["text"] for e in es]))
+            rows.append(("Days on the market", [str(e["days_on_market"]) if e.get("days_on_market") not in (None, "") else "unknown" for e in es]))
+        for e in es:
+            e["opinion_rows"] = store.list_opinions(e["id"])
+        for person in dict.fromkeys(o["person"] for e in es for o in e["opinion_rows"]):
+            rows.append((f"{_t(person, 'person name', 40)}'s rating (1 to 5)",
+                         [next((str(o["rating"]) for o in e["opinion_rows"] if o["person"] == person and o["rating"] is not None), "unknown")
+                          for e in es]))
+        rows.append(("Still unknown", [_unknown_text(e) or "nothing" for e in es]))
         lines = ["Comparing: " + "; ".join(f"#{e['id']} {_title(e)}" for e in es)]
         differ = []
         for label, vals in rows:
@@ -1133,16 +1147,29 @@ def build_server(store: Store) -> FastMCP:
         scored = [e for e in fitting if e["score_total"] is not None]
         left_out = [e for e in es if e not in fitting]
         if priced:
-            cheap = min(priced, key=lambda e: e["cost_total"])
-            lines.append(f"Lowest true monthly cost: #{cheap['id']} at {_money(cheap['cost_total'])} (of the places that fit).")
+            low = min(e["cost_total"] for e in priced)
+            cheap_all = [e for e in priced if abs(e["cost_total"] - low) < 0.005]
+            cheap = cheap_all[0]
+            if len(priced) > 1 and len(cheap_all) == len(priced):
+                lines.append(f"No lowest true monthly cost: they are all {_money(low)}.")
+            elif len(cheap_all) > 1:
+                lines.append(f"Lowest true monthly cost: " + ", ".join(f"#{e['id']}" for e in cheap_all) + f" are tied at {_money(low)} (of the places that fit).")
+            else:
+                lines.append(f"Lowest true monthly cost: #{cheap['id']} at {_money(cheap['cost_total'])} (of the places that fit).")
             cheaper = [e for e in priced_all if e not in fitting and e["cost_total"] < cheap["cost_total"]]
             if cheaper:
                 lines.append("Cheaper, but not a place to pick: " + ", ".join(f"#{e['id']} ({compare_mod.FIT_TEXT.get(e['score'].get('fit'), 'does not fit')})" for e in cheaper) + ".")
         elif priced_all:
             lines.append("No place here fits, so I am not naming a lowest-cost place.")
         if scored:
-            best = max(scored, key=lambda e: e["score_total"])
-            lines.append(f"Highest score: #{best['id']} at {best['score_total']} (of the places that fit).")
+            top = max(e["score_total"] for e in scored)
+            best_all = [e for e in scored if e["score_total"] == top]
+            if len(scored) > 1 and len(best_all) == len(scored):
+                lines.append(f"No highest score: they all score {top}.")
+            elif len(best_all) > 1:
+                lines.append("Highest score: " + ", ".join(f"#{e['id']}" for e in best_all) + f" are tied at {top} (of the places that fit).")
+            else:
+                lines.append(f"Highest score: #{best_all[0]['id']} at {top} (of the places that fit).")
         if left_out:
             lines.append("Left out of the best-of lines because they don't fit or need a check first: " + ", ".join(f"#{e['id']}" for e in left_out) + ".")
         return reply("\n".join(lines), place_ids=[e["id"] for e in es], scores=[e["score_total"] for e in es], costs=[e["cost_total"] for e in es])

@@ -36,6 +36,12 @@ SHARED_INT = tuple(f for f in PLACE_INT if f not in LEFT_OUT_PLACE_FIELDS)
 
 # Rows of Compare that are about the person, not the place.
 _PERSONAL_ROWS = {"stage", "rating", "opinions"}
+_PROVENANCE = re.compile(r" \((?:you|added by Claude)\)")
+
+
+def _is_personal(key: str) -> bool:
+    """Each person's own rating row ("person-Sam") is as personal as the rating rows."""
+    return key in _PERSONAL_ROWS or key.startswith("person-")
 
 
 # --------------------------------------------------------------------------- the page to share
@@ -57,19 +63,13 @@ def comparison_sections(places: list[dict[str, Any]], include_notes: bool = Fals
     possible-scam marks. With ``include_notes`` the person's own notes and their people's ratings are added."""
     sections = []
     for sec in compare.build_rows(places):
-        rows = [r for r in sec["rows"] if include_notes or r["key"] not in _PERSONAL_ROWS]
+        rows = [r for r in sec["rows"] if include_notes or not _is_personal(r["key"])]
+        for r in rows:
+            if r["key"].startswith("commute-"):  # who typed a commute (you, Claude) is not for the person reading a copy
+                for c in r["cells"]:
+                    c["text"] = _PROVENANCE.sub("", c["text"])
         if rows:
             sections.append({"title": sec["title"], "rows": rows})
-    cash = [p["cost"].get("cash_at_move_in") for p in places]
-    if any(cash):
-        cells = [compare._money(c["total"]) if c else compare._cell(None) for c in cash]
-        row = compare._row("cash_at_move_in", "Cash needed on move-in day", cells, "low", only_if_any=True)
-        if row:
-            target = next((s for s in sections if s["title"] == "Dates and money up front"), None)
-            if target is None:
-                sections.append({"title": "Dates and money up front", "rows": [row]})
-            else:
-                target["rows"].append(row)
     scam_cells = []
     for p in places:
         flags = list(p.get("flags") or [])
@@ -84,11 +84,10 @@ def comparison_sections(places: list[dict[str, Any]], include_notes: bool = Fals
         note_cells = [_text_cell((p.get("notes") or "").strip()[:2000]) for p in places]
         opinion_cells = []
         for p in places:
-            lines = [f"{o['person']}: {o['rating'] if o['rating'] is not None else '-'}" + (f", {o['note']}" if o["note"] else "")
-                     for o in p.get("opinion_rows") or []]
+            lines = [f"{o['person']}: {o['note']}" for o in p.get("opinion_rows") or [] if o["note"]]
             opinion_cells.append(_text_cell("\n".join(lines)))
         rows = [compare._row("notes", "My notes", note_cells, only_if_any=True),
-                compare._row("people", "What each person thinks", opinion_cells, only_if_any=True)]
+                compare._row("people", "What each person wrote", opinion_cells, only_if_any=True)]
         rows = [r for r in rows if r]
         if rows:
             sections.append({"title": "My notes", "rows": rows})

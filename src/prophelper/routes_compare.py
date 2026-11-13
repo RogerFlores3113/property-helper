@@ -44,6 +44,8 @@ def compare_page(request: Request, ids: list[str] | None = Query(default=None)):
     places = []
     for p in found:
         places.append(enrich.enrich_places(store, store.get_search(p["search_id"]), [p])[0])
+    for p in places:
+        p["opinion_rows"] = share.opinions_for(store, p["id"])
     sections = compare.build_rows(places)
     ctx.update(places=places, sections=sections, summary=compare.summary_lines(places, sections), picked=[p["id"] for p in places],
                missing=missing)
@@ -67,9 +69,8 @@ def compare_share(request: Request, ids: list[str] | None = Query(default=None),
     except compare.CompareError as exc:
         return redirect("/compare", error=str(exc))
     places = [enrich.enrich_places(store, store.get_search(p["search_id"]), [p])[0] for p in found]
-    if notes:
-        for p in places:
-            p["opinion_rows"] = share.opinions_for(store, p["id"])
+    for p in places:
+        p["opinion_rows"] = share.opinions_for(store, p["id"])  # shown only with notes=1 (see share.comparison_sections)
     html = share.comparison_html(request.app.state.templates, places, include_notes=bool(notes))
     return Response(html, media_type="text/html; charset=utf-8", headers={
         "Content-Disposition": f'attachment; filename="{share.comparison_filename()}"', "X-Content-Type-Options": "nosniff"})
