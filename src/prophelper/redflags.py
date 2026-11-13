@@ -13,11 +13,12 @@ from typing import Any, Iterable
 # Each rule: (name, pattern, message). The message says what it is and what to do, in plain words.
 _PAYMENT = re.compile(
     r"\b(wire (?:the |me |us |it |your )?(?:deposit|money|funds|payment|rent|fee)|wiring (?:the |your )?(?:deposit|money|funds)|wire transfer|western union|money ?gram|"
-    r"gift ?cards?|itunes card|bitcoin|btc|crypto(?:currency)?|apple pay only|cash ?app only|venmo only|"
+    r"gift ?cards?|itunes card|bitcoin|btc|crypto(?:currency)?|apple pay only|"
     r"send (?:the |your )?(?:deposit|money|payment))\b", re.I)
 _ZELLE_ONLY = re.compile(r"\b(zelle|cash ?app|venmo|paypal friends)\s*(?:only|is the only|payments? only)\b|"
                          r"\bonly (?:accept|take)s? (?:payment (?:by|through|via) )?(?:zelle|cash ?app|venmo|crypto|bitcoin)\b|"
                          r"\b(?:pay|payment|deposit)\b[^.\n]{0,30}\b(?:by|through|via|with)\s+(?:zelle|cash ?app|venmo)\s+only\b", re.I)
+_PAY_APP = re.compile(r"\b(?:cash ?app|venmo)\b|\bzelle\b[^.\n]{0,40}\b(?:deposit|rent|pay|payment|hold|secure)\b|\b(?:deposit|rent|pay|payment|hold|secure)\b[^.\n]{0,40}\bzelle\b", re.I)
 _ABROAD = re.compile(r"\b(out of (?:the )?(?:country|town|state|us|u\.s\.)|owner (?:is )?(?:abroad|overseas|traveling|travelling)|"
                      r"(?:living|working|stationed|serving|based) (?:abroad|overseas|in (?:africa|europe|asia|london|canada|spain|italy|dubai))|"
                      r"(?:abroad|overseas|missionary|mission trip|deployed)|can'?t (?:show|meet|tour)|unable to (?:show|meet|tour)|"
@@ -67,6 +68,9 @@ def local_flags(place: dict[str, Any], peer_prices: Iterable[float] = ()) -> lis
     for pattern, message in _rules():
         if pattern.search(text):
             flags.append(message)
+    if _PAY_APP.search(text) and not _ZELLE_ONLY.search(text):
+        flags.append("It mentions Cash App, Venmo or Zelle for the deposit or rent. Those payments can't be taken back. "
+                     "Don't pay anything before you have toured the place and read the lease.")
     price = place.get("price")
     peers = [float(p) for p in peer_prices if p]
     try:
