@@ -24,7 +24,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from . import backups, commute, enrich, helpers, parsers, paths, scoring, stages, today
+from . import backups, commute, enrich, helpers, movein, parsers, paths, scoring, stages, today
 from .routes_geocode import lookup_for_anchor
 from .deps import get_store, is_htmx, redirect, render
 from .store import COMMUTE_MODES, NotFound, StageRuleError, Store
@@ -152,7 +152,7 @@ def _place_page(request: Request, place_id: int, *, status: int = 200, form_valu
             commute_rows.append({"anchor": a, "mode": mode, "found": found, "saved": saved})
     criteria = store.list_criteria(search["id"])
     return render(request, "place.html", status_code=status, place=full, search=search,
-                  avail_warning=today.availability_warning(place, search), stages=stages.stages_for(search["mode"]),
+                  avail_warning=movein.gap_warning(place, search), stages=stages.stages_for(search["mode"]),
                   events=store.list_events(place_id), commute_rows=commute_rows, anchors=anchors, criteria=criteria,
                   custom_scores=store.custom_scores(place_id), form_values=form_values or {}, form_error=error,
                   all_searches=store.list_searches(), listing_has_text=bool(place["listing_text"]),

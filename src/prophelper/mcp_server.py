@@ -33,10 +33,11 @@ from . import commute as commute_mod
 from . import compare as compare_mod
 from . import guards, helpers, scoring
 from . import stages as st
+from . import movein
 from . import today as today_view
 from .enrich import enrich_place, enrich_places
 from .store import (AI_EVENT_TEXT_MAX, AI_NEVER_ENTERS, COMMUTE_MODES, CONTACT_LOG_KINDS, CONTACT_ROLES, CRITERION_KINDS, MAX_PEOPLE, NotFound,
-                    Store, _clean_target, ai_move_problem, normalize_url, to_utc_iso)
+                    PARKING_VALUES, Store, _clean_target, ai_move_problem, normalize_url, to_utc_iso)
 
 INSTRUCTIONS = """\
 Property Helper keeps the user's own apartment or house hunt on their computer: every place they found, where it
@@ -571,6 +572,20 @@ def map_role(role: Any, mode: str = "rent") -> str:
 
 
 # --------------------------------------------------------------------------- the server
+def _title_part(fields: Any) -> str:
+    """' ("Elm Court")' for an error message, from a place's own title or address; '' when it has neither."""
+    if not isinstance(fields, dict):
+        return ""
+    name = _clip(str(fields.get("title") or fields.get("address") or fields.get("url") or ""), 50).strip()
+    return f' ("{guards.inline(name)}")' if name else ""
+
+
+def _named_error(who: str, fields: dict[str, Any], exc: Exception) -> str:
+    """A store complaint about a value, with the place it is about: 'Place 3 ("Elm Court"): Price needs to be a number. Nothing was saved.'"""
+    text = str(exc).strip()
+    return f"{who}{_title_part(fields)}: {text}{'' if text.endswith('.') else '.'} Nothing was saved."
+
+
 def build_server(store: Store) -> FastMCP:
     """A FastMCP server bound to this store. The store is put in no-delete mode: nothing the AI calls can delete."""
     store.enable_no_delete()
@@ -595,6 +610,11 @@ def build_server(store: Store) -> FastMCP:
                              f"and {used} were already added in the last hour. Nothing was saved. {STRICT_OFF_HOW}")
 
     def check_fields(fields: dict[str, Any], where: str = "") -> dict[str, Any]:
+        word = " ".join(str(fields.get("parking") or "").replace("_", " ").lower().split())
+        if word and re.search(r"\b(reserved|assigned)\b", word):
+            raise ValueError(f"{where}parking \"{_clip(str(fields.get('parking')), 40)}\" isn't one of the options. Parking is one of: "
+                             f"{', '.join(PARKING_VALUES)}. Pick the closest one (a reserved or assigned outdoor space is usually lot) "
+                             f"and put the detail in ai_notes. Nothing was saved.")
         bad = [k for k in fields if k not in PLACE_KEYS and k not in ("stage", "commutes", "search_id")]
         for k in bad:
             if k in USER_ONLY:
@@ -707,7 +727,7 @@ def build_server(store: Store) -> FastMCP:
                                                        f"{', deal-breaker' if c['dealbreaker'] else ''})" for c in crits))
             else:
                 lines.append("The current search has no criteria yet, so places have no score. update_search can add some.")
-            es = [e for e in enrich_places(store, cur) if not e["hidden_by_dealbreaker"]]
+            es = [e for e in enrich_places(store, cur) if not e["hidden_by_dealbreaker"] and e["stage"] != st.PASSED and not e.get("hidden")]
             es.sort(key=lambda e: (e["score"].get("sort_group", 0), -(e["score_total"] if e["score_total"] is not None else -1), e["id"]))
             if es:
                 lines.append("Top places:")
@@ -778,6 +798,9 @@ def build_server(store: Store) -> FastMCP:
         lines.append("Score by criterion: " + "; ".join(f"{_lab(i['label'], i['kind'])} {round(i['score'] * 100)}%" + ("" if i["known"] else " (unknown)")
                                                         for i in e["score"]["items"]))
         lines += _cash_lines(e)
+        gap = movein.gap_warning(e, _search_of(store, e))
+        if gap:
+            lines.append(gap + ".")
         if e["cost"].get("mode") != "buy":
             dl = store.application_deadline(e["id"])
             if dl:
@@ -820,7 +843,10 @@ def build_server(store: Store) -> FastMCP:
         if strict_on(store) and not store.find_duplicate(_search_for(store, fields.get("search_id")).get("id"), url=fields.get("url"),
                                                          address=fields.get("address"), unit=fields.get("unit")):
             strict_check(1, batch=False)
-        place, created, notes, _ = add_one(fields)
+        try:
+            place, created, notes, _ = add_one(fields)
+        except ValueError as exc:
+            raise ValueError(_named_error("This place", fields, exc)) from None
         return reply("\n".join(finish_add(place, created, notes, photos=bool(fields.get("photo_urls")))), place_id=place["id"], created=created,
                      stage=place["stage"])
 
@@ -847,19 +873,23 @@ def build_server(store: Store) -> FastMCP:
         for i, item in enumerate(places, 1):
             if not isinstance(item, dict):
                 raise ValueError(f"Place {i} needs to be an object of fields. Nothing was saved.")
-            f = check_fields(item, f"Place {i}: ")
+            f = check_fields(item, f"Place {i}{_title_part(item)}: ")
             if not any(f.get(k) for k in ("title", "address", "url")):
                 raise ValueError(f"Place {i} needs at least a title, an address or a link. Nothing was saved.")
             if search_id is not None:
                 f.setdefault("search_id", search_id)
             cleaned.append(f)
         lines, out = [], []
-        for f in cleaned:
-            place, created, notes, _ = add_one(f)
-            e = _enrich(store, place)
-            lines.append(("Added " if created else "Already saved, updated ") + _line(e) + ("" if created else " (filled only empty fields)"))
-            lines += ["  " + n for n in notes if n.startswith("Ignored on this repeat")]
-            out.append({"id": place["id"], "created": created})
+        with store._write():  # all or nothing: a place with a bad value undoes the ones before it
+            for i, f in enumerate(cleaned, 1):
+                try:
+                    place, created, notes, _ = add_one(f)
+                except ValueError as exc:
+                    raise ValueError(_named_error(f"Place {i}", f, exc)) from None
+                e = _enrich(store, place)
+                lines.append(("Added " if created else "Already saved, updated ") + _line(e) + ("" if created else " (filled only empty fields)"))
+                lines += ["  " + n for n in notes if n.startswith("Ignored on this repeat")]
+                out.append({"id": place["id"], "created": created})
         added = sum(1 for o in out if o["created"])
         lines.insert(0, f"Added {added}, updated {len(out) - added}.")
         if any(f.get("photo_urls") for f in cleaned):
@@ -877,9 +907,14 @@ def build_server(store: Store) -> FastMCP:
         after = store.update_place(before["id"], by="ai", **fields)
         notes = set_commutes(after, commutes)
         changed = _changed(before, after)
+        if any(n.startswith("Saved ") for n in notes):
+            changed = sorted(set(changed) | {"commutes"})
         e = _enrich(store, after)
-        lines = [f"Updated {_title(e)} (id {e['id']}): " + (", ".join(changed) if changed else "nothing changed") + "."]
-        if any(not _is_blank(before.get(k.replace(" ", "_"))) for k in changed if k not in ("AI notes", "photo urls")):
+        if changed:
+            lines = [f"Updated {_title(e)} (id {e['id']}): " + ", ".join(changed) + "."]
+        else:
+            lines = [f"Nothing changed on {_title(e)} (id {e['id']}): everything you sent was already saved, so nothing was written."]
+        if any(not _is_blank(before.get(k.replace(" ", "_"))) for k in changed if k not in ("AI notes", "photo urls", "commutes")):
             lines.append("A value I replaced is on the timeline, so the user can put it back.")
         if "ai_notes" in fields:
             lines.append("Your note was added to AI notes under today's date. The user's own notes were not touched.")
