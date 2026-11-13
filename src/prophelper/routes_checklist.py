@@ -34,12 +34,16 @@ def _item_or_404(store: Store, item_id: int) -> dict[str, Any]:
 @router.get("/checklist", include_in_schema=False)
 def checklist_page(request: Request):
     store = get_store(request)
-    items = store.list_checklist()
     search = store.current_search()
     mode = search["mode"] if search else "rent"
-    have = {i["label"].strip().lower() for i in items}
-    missing = [label for label, _n in store.default_checklist(mode) if label.strip().lower() not in have]
-    return render(request, "checklist.html", items=items, done=sum(1 for i in items if i["done"]), mode=mode, missing=missing)
+    items = store.visible_checklist(search)
+    have = {i["label"].strip().lower() for i in store.list_checklist()}
+    has_pets = bool(search and search.get("pet_kind"))
+    missing = [label for label, _n in store.default_checklist(mode)
+               if label.strip().lower() not in have and (has_pets or label.strip().lower() != "pet records")]
+    places = store.list_places(search["id"]) if search and mode != "buy" else []
+    return render(request, "checklist.html", items=items, done=sum(1 for i in items if i["done"]), mode=mode, missing=missing,
+                  places=places[:12])
 
 
 @router.post("/checklist/defaults", include_in_schema=False)

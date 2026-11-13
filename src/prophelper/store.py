@@ -35,14 +35,16 @@ from . import stages as st
 # --------------------------------------------------------------------------- vocabulary
 EVENT_KINDS: tuple[str, ...] = ("note", "stage", "call", "email", "text", "tour", "document", "ai")
 EVENT_SOURCES: tuple[str, ...] = ("you", "ai")
-CONTACT_ROLES: tuple[str, ...] = ("landlord", "property manager", "leasing agent", "buyer's agent", "seller's agent", "other")
+CONTACT_ROLES: tuple[str, ...] = ("landlord", "property manager", "leasing agent", "buyer's agent", "seller's agent", "other",
+                                  "lender", "inspector", "title or closing", "seller")
 CONTACT_LOG_KINDS: tuple[str, ...] = ("call", "email", "text", "in person")
 DIRECTIONS: tuple[str, ...] = ("out", "in")
 TOUR_STATUSES: tuple[str, ...] = ("booked", "done", "cancelled")
 TOUR_ITEMS: tuple[str, ...] = ("water pressure", "hot water", "cell signal", "noise", "smells", "light", "appliances",
                                "laundry", "storage", "parking", "neighbors")
 TOUR_STATES: tuple[str, ...] = ("ok", "issue", "")
-DOCUMENT_KINDS: tuple[str, ...] = ("lease", "application", "disclosure", "inspection", "photo", "other")
+DOCUMENT_KINDS: tuple[str, ...] = ("lease", "application", "disclosure", "inspection", "photo", "other",
+                                   "offer", "purchase contract", "appraisal", "loan estimate")
 DRAFT_KINDS: tuple[str, ...] = ("fit score", "red flags", "tour questions", "message")
 CRITERION_KINDS: tuple[str, ...] = ("price", "beds", "baths", "sqft", "commute", "laundry", "dishwasher", "parking",
                                     "pets", "fenced_yard", "newer", "custom")
@@ -2135,6 +2137,18 @@ class Store:
     def list_checklist(self) -> list[dict[str, Any]]:
         return self._rows("SELECT * FROM checklist_items ORDER BY sort_order, id")
 
+    @staticmethod
+    def _pet_item_hidden(row: dict[str, Any], search: dict[str, Any] | None) -> bool:
+        """The untouched starter item "Pet records" only shows when the search has pets."""
+        if search is None or search.get("pet_kind"):
+            return False
+        return row["label"].strip().lower() == "pet records" and not row["note"] and not row["done"]
+
+    def visible_checklist(self, search: dict[str, Any] | None = None) -> list[dict[str, Any]]:
+        """The list as a person sees it: without the starter "Pet records" item when the search has no pets."""
+        search = search if search is not None else self.current_search()
+        return [r for r in self.list_checklist() if not self._pet_item_hidden(r, search)]
+
     def add_checklist_item(self, label: str, note: str = "") -> dict[str, Any]:
         label = _text(label, 200)
         if not label:
@@ -2191,6 +2205,8 @@ class Store:
         self._require_place(place_id)
         rows = self._rows("SELECT c.*, pc.done_at AS done_at FROM checklist_items c LEFT JOIN place_checklist pc "
                           "ON pc.item_id = c.id AND pc.place_id = ? ORDER BY c.sort_order, c.id", (place_id,))
+        search = self.get_search(self.get_place(place_id)["search_id"])
+        rows = [r for r in rows if not self._pet_item_hidden(r, search)]
         for r in rows:
             r["done_here"] = bool(r["done_at"])
         return rows
@@ -2215,9 +2231,7 @@ class Store:
 
     def place_checklist_left(self, place_id: int) -> int:
         """How many checklist items are not ticked yet for this place."""
-        row = self._row("SELECT COUNT(*) AS n FROM checklist_items c WHERE NOT EXISTS (SELECT 1 FROM place_checklist pc "
-                        "WHERE pc.item_id = c.id AND pc.place_id = ?)", (place_id,))
-        return int(row["n"]) if row else 0
+        return sum(1 for r in self.place_checklist(place_id) if not r["done_here"])
 
     # ------------------------------------------------------------------ AI drafts
     def add_draft(self, place_id: int, kind: str, body: str, model: str = "") -> dict[str, Any]:

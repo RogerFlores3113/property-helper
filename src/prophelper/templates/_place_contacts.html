@@ -13,7 +13,7 @@
     {% for c in _linked %}
     <li class="item"><div class="item-main">
       <a class="item-title" href="/contacts/{{ c.id }}">{{ c.name }}</a>
-      <span class="item-sub">{{ c.role|capitalize }}{% if c.company %} at {{ c.company }}{% endif %}{% if c.phone %} &middot; {{ c.phone }}{% endif %}{% if c.email %} &middot; {{ c.email }}{% endif %}</span>
+      <span class="item-sub">{{ ("Listing agent" if c.role == "seller's agent" and search.mode == 'buy' else c.role|capitalize) }}{% if c.company %} at {{ c.company }}{% endif %}{% if c.phone %} &middot; {{ c.phone }}{% endif %}{% if c.email %} &middot; {{ c.email }}{% endif %}</span>
       {% if _waiting.get(c.id) %}<span class="badge wait">Waiting on a reply ({{ _waiting[c.id].days }} day{{ 's' if _waiting[c.id].days != 1 }})</span>{% endif %}
     </div>
     <div class="item-actions"><form class="inline" method="post" action="/places/{{ place.id }}/contacts/{{ c.id }}/unlink">{{ button("Take off", small=True, aria="Take " ~ c.name ~ " off this place") }}</form></div></li>
@@ -52,7 +52,8 @@
     <form method="post" action="/places/{{ place.id }}/contacts" class="stack">
       <div class="form-grid">
         <div class="field"><label for="pn-name">Name</label><input id="pn-name" name="name" required maxlength="200"></div>
-        <div class="field"><label for="pn-role">Role</label><select id="pn-role" name="role">{% for r in CONTACT_ROLES %}<option value="{{ r }}"{% if r == 'leasing agent' %} selected{% endif %}>{{ r|capitalize }}</option>{% endfor %}</select></div>
+        <div class="field"><label for="pn-role">Role</label>{% set _role_opts = [("buyer's agent", "Buyer's agent"), ("seller's agent", "Listing agent"), ("lender", "Lender"), ("inspector", "Inspector"), ("title or closing", "Title or closing"), ("seller", "Seller"), ("other", "Other")] if search.mode == 'buy' else [("landlord", "Landlord"), ("property manager", "Property manager"), ("leasing agent", "Leasing agent"), ("buyer's agent", "Buyer's agent"), ("seller's agent", "Seller's agent"), ("other", "Other")] %}
+        <select id="pn-role" name="role">{% for v, lab in _role_opts %}<option value="{{ v }}"{% if v == ("buyer's agent" if search.mode == 'buy' else 'leasing agent') %} selected{% endif %}>{{ lab }}</option>{% endfor %}</select></div>
         <div class="field"><label for="pn-company">Company</label><input id="pn-company" name="company" maxlength="200"></div>
         <div class="field"><label for="pn-email">Email</label><input id="pn-email" type="email" name="email" maxlength="320"></div>
         <div class="field"><label for="pn-phone">Phone</label><input id="pn-phone" name="phone" maxlength="50"></div>

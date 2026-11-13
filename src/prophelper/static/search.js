@@ -22,6 +22,16 @@
         });
       })(forms[i]);
     }
+    // The first form's budget label follows Renting or Buying (without this script it names both).
+    var modeSel = document.getElementById("f-mode");
+    var budgetLabel = document.querySelector('label[for="new-budget"]');
+    if (modeSel && budgetLabel) {
+      var setBudget = function () {
+        budgetLabel.textContent = modeSel.value === "buy" ? "Most you'd pay for the home" : "Most you can spend per month";
+      };
+      setBudget();
+      modeSel.addEventListener("change", setBudget);
+    }
     // A saved place you go often with no location starts with its coordinates folded away; one with a location too.
     var folded = document.querySelectorAll("details.coords");
     for (var j = 0; j < folded.length; j++) { folded[j].open = false; }

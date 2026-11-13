@@ -34,7 +34,7 @@
         {{ field("Name", "name", "", required=True, placeholder="1-bed near campus, fall 2027") }}
         {{ select("Renting or buying?", "mode", [("rent", "Renting"), ("buy", "Buying")], "rent") }}
         {{ field("Area", "area", "", placeholder="Champaign, IL") }}
-        {{ field("Most you can spend per month", "budget_max", "", kind="number", step="any", hint="For buying, the most you would pay for the home.") }}
+        {{ field("Most you can spend per month, or the most you'd pay for the home when buying", "budget_max", "", kind="number", step="any", hint="Pick Renting or Buying first. For buying, this is the most you would pay for the home.", id="new-budget") }}
         {{ field("Move in by (renting)", "move_in", "", kind="date") }}
         {{ field("Target close date (buying)", "target_close", "", kind="date") }}
       </div>
@@ -61,10 +61,10 @@
       {{ field("Name", "name", shown.name, required=True) }}
       {{ select("Renting or buying?", "mode", [("rent", "Renting"), ("buy", "Buying")], shown.mode) }}
       {{ field("Area", "area", shown.area) }}
-      {{ field("Budget (most per month, or the most for a home)", "budget_max", shown.budget_max if shown.budget_max is not none else '', kind="number", step="any") }}
+      {{ field("Most you'd pay for the home" if shown.mode == 'buy' else "Most you can spend per month", "budget_max", shown.budget_max if shown.budget_max is not none else '', kind="number", step="any") }}
       {{ field("Move in by", "move_in", shown.move_in or '', kind="date") }}
       {{ field("Target close date", "target_close", shown.target_close or '', kind="date") }}
-      {{ field("People sharing the cost", "people", shown.people or 1, kind="number", step="1", hint="Rent or payment split between this many people. Place pages, the board and Compare then show a per-person cost.") }}
+      {{ field("People splitting the cost (leave at 1 for a family or couple sharing one budget)", "people", shown.people or 1, kind="number", step="1", hint="Rent or payment split between this many people. Place pages, the board and Compare then show a per-person cost.") }}
       {{ select("Your pets", "pet_kind", [("cat", "A cat"), ("dog", "A dog"), ("both", "Cats and dogs")], shown.pet_kind or '', blank="No pets") }}
       {{ field("How heavy your dog is (lb)", "pet_weight", shown.pet_weight if shown.pet_weight is not none else '', kind="number", step="any", hint="A place that only allows smaller dogs then shows as not fitting your pets.") }}
       {{ field("How many pets", "pet_count", shown.pet_count if shown.pet_count is not none else '', kind="number", step="1") }}
@@ -76,6 +76,16 @@
     <p>{{ button("Save search", kind="primary") }}</p>
   </form>
   <p class="fine"><a class="btn small" href="/search/export.json?id={{ shown.id }}" download>Export this search</a> Saves a file with this search, what matters, the important places and the places with their listing text, to send to a housemate. It never holds your contacts, documents, notes or ratings.</p>
+  {% set _shown_places = request.app.state.store.list_places(shown.id) %}
+  <div id="share-links">
+    <h3>Share and opinions</h3>
+    <ul>
+      <li><a href="/compare">Save a comparison to share</a>: pick 2 to 4 places, then press "Save a copy to share" (a page you can send to someone).</li>
+      <li><a href="/search/export.json?id={{ shown.id }}" download>Export this search</a>: a file for a housemate, who can bring it in with "Import a search" above.</li>
+      <li>What each person thinks: open a place and look under "What each of you thinks".{% if shown.people_names|length > 1 %} Your people: {{ shown.people_names|join(', ') }}.{% else %} Add names in "Names of the people sharing" above first.{% endif %}
+        {% if shown.people_names|length > 1 and _shown_places %}<br>{% for p in _shown_places[:6] %}<a href="/places/{{ p.id }}#opinions">{{ p.title }}</a>{{ ', ' if not loop.last }}{% endfor %}{% endif %}</li>
+    </ul>
+  </div>
   {% if shown.mode == 'buy' %}<p class="fine">Buying estimates use the down payment, rate and loan length in <a href="/settings#map">Settings</a>.</p>{% endif %}
 </section>
 
@@ -99,7 +109,7 @@
   <h3>Add something that matters</h3>
   <form method="post" action="/search/{{ shown.id }}/criteria" class="stack" data-kind-form>
     <div class="field"><label for="nc-kind">What kind</label>
-      <select id="nc-kind" name="kind" data-kind-select>{% for k in CRITERION_KINDS %}<option value="{{ k }}">{{ "Price" if k == 'price' and shown.mode == 'buy' else KIND_LABELS.get(k, k) }}</option>{% endfor %}</select></div>
+      <select id="nc-kind" name="kind" data-kind-select>{% for k in CRITERION_KINDS %}<option value="{{ k }}">{{ "Price" if k == 'price' and shown.mode == 'buy' else ("Your own rule (you score each place 0 to 5)" if k == 'custom' else KIND_LABELS.get(k, k)) }}</option>{% endfor %}</select></div>
     <div class="field"><label for="nc-label">Name (optional)</label><input id="nc-label" name="label" type="text" placeholder="Left empty, a plain name is made for you"></div>
     <div class="crit-form">
       <div class="field" data-kinds="price"><label for="nc-max">{{ "Price: most you'd pay for the home" if shown.mode == 'buy' else 'Price: most per month, all in' }}</label><input id="nc-max" name="t_max" type="number" step="any"></div>
@@ -114,7 +124,7 @@
       <div class="field" data-kinds="pets"><label for="nc-want-pets">Pets: you have</label>
         <select id="nc-want-pets" name="t_want_pets"><option value="">Any pets</option><option value="cats">Cats</option><option value="dogs">Dogs</option><option value="both">Cats and dogs</option></select></div>
       <div class="field" data-kinds="newer"><label for="nc-year">Newer: built in or after</label><input id="nc-year" name="t_year" type="number" step="1"></div>
-      <p class="fine" data-kinds="dishwasher fenced_yard custom">Nothing more to choose for this one. (Your own score: you give each place a score from 0 to 5 on its page.)</p>
+      <p class="fine" data-kinds="dishwasher fenced_yard custom">Nothing more to choose for this one. (Your own rule: you give each place a score from 0 to 5 on its page.)</p>
     </div>
     <div class="crit-form">
       <div class="field"><label for="nc-weight">How much it matters (0 to 100)</label><input id="nc-weight" name="weight" type="number" min="0" max="100" value="10" style="width:5rem"></div>

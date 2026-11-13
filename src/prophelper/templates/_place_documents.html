@@ -7,7 +7,8 @@
     <div class="form-grid">
       <div class="field"><label for="doc-file">File</label><input id="doc-file" type="file" name="file" required></div>
       <div class="field"><label for="doc-kind">What it is</label>
-        <select id="doc-kind" name="kind">{% for k in DOCUMENT_KINDS %}<option value="{{ k }}"{% if k == 'other' %} selected{% endif %}>{{ k|capitalize }}</option>{% endfor %}</select></div>
+        {% set _doc_opts = [("offer", "Offer"), ("purchase contract", "Purchase contract"), ("inspection", "Inspection report"), ("appraisal", "Appraisal"), ("disclosure", "Disclosures"), ("loan estimate", "Loan estimate"), ("photo", "Photo"), ("other", "Other")] if search.mode == 'buy' else [("lease", "Lease"), ("application", "Application"), ("disclosure", "Disclosure"), ("inspection", "Inspection"), ("photo", "Photo"), ("other", "Other")] %}
+        <select id="doc-kind" name="kind">{% for v, lab in _doc_opts %}<option value="{{ v }}"{% if v == ('offer' if search.mode == 'buy' else 'other') %} selected{% endif %}>{{ lab }}</option>{% endfor %}</select></div>
     </div>
     <p>{{ button("Add the file", small=True) }}</p>
   </form>
@@ -25,5 +26,5 @@
       </div></li>
     {% endfor %}
   </ul>
-  {% else %}<p class="fine">No files yet. Leases, applications, disclosures and inspection reports can go here.</p>{% endif %}
+  {% else %}<p class="fine">No files yet. {{ 'Offers, the purchase contract, inspection reports, the appraisal and disclosures can go here.' if search.mode == 'buy' else 'Leases, applications, disclosures and inspection reports can go here.' }}</p>{% endif %}
 </section>

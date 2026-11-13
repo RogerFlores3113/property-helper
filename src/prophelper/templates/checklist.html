@@ -5,7 +5,11 @@
 {% call page_head("Application checklist", "What a lender and seller usually ask for, so you are ready before you make an offer." if mode == "buy" else "What most landlords ask for, so you are ready before you apply.") %}
   <a class="btn small" href="#add">Add an item</a>
 {% endcall %}
-<p class="lead">Property Helper keeps this list, not copies of your documents. Keep the papers themselves wherever you keep them now.{% if mode != 'buy' %} On each place you can tick what is done for that place, under "Applying here".{% endif %}</p>
+<p class="lead">Property Helper keeps this list, not copies of your documents. Keep the papers themselves wherever you keep them now.</p>
+{% if mode != 'buy' %}
+<p class="fine" id="apply-explain">This is your own documents list: "Ready" means you have that paper in hand. Each place also has its own ticks under "Applying here", for what is done for that one place, so the counts can differ.
+  {% if places %}Jump to a place's list: {% for p in places %}<a href="/places/{{ p.id }}#applying">{{ p.title }}</a>{{ ', ' if not loop.last }}{% endfor %}.{% endif %}</p>
+{% endif %}
 
 <section class="card" aria-labelledby="list-h">
   <h2 id="list-h">{{ done }} of {{ items|length }} ready</h2>
@@ -51,7 +55,7 @@
 <section class="card" id="add" aria-labelledby="add-h">
   <h2 id="add-h">Add an item</h2>
   <form method="post" action="/checklist/items" class="stack">
-    {{ field("What it is", "label", required=True, id="new-label", placeholder="{{ 'Letter from my lender' if mode == 'buy' else 'Letter from my employer' }}") }}
+    {{ field("What it is", "label", required=True, id="new-label", placeholder=("Letter from my lender" if mode == "buy" else "Letter from my employer")) }}
     {{ field("Note (optional)", "note", id="new-note") }}
     <p>{{ button("Add to the list", kind="primary") }}</p>
   </form>

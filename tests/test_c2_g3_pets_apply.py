@@ -110,8 +110,8 @@ def test_pet_deposit_only_in_cash_at_move_in(store):
 def test_place_checklist_ticks_are_per_place(store):
     s = _search(store)
     a, b = _place(store, s["id"], title="A"), _place(store, s["id"], title="B")
-    n = len(store.list_checklist())
-    item = store.list_checklist()[0]
+    n = len(store.visible_checklist())
+    item = store.visible_checklist()[0]
     store.set_place_checklist(a["id"], item["id"], True)
     assert store.place_checklist_left(a["id"]) == n - 1 and store.place_checklist_left(b["id"]) == n
     assert next(i for i in store.place_checklist(a["id"]) if i["id"] == item["id"])["done_here"] is True
@@ -131,10 +131,10 @@ def test_place_page_and_route(store):
     c = local_client(store)
     html = c.get(f"/places/{p['id']}").text
     assert "Applying here" in html and "Apply by" in html and "in 3 days" in html and "$45" in html
-    item = store.list_checklist()[0]
+    item = store.visible_checklist()[0]
     r = c.post(f"/places/{p['id']}/checklist/{item['id']}", data={"value": "1"}, follow_redirects=False)
     assert r.status_code in (302, 303)
-    assert store.place_checklist_left(p["id"]) == len(store.list_checklist()) - 1
+    assert store.place_checklist_left(p["id"]) == len(store.visible_checklist()) - 1
     assert c.post(f"/places/999/checklist/{item['id']}", data={"value": "1"}).status_code == 404
     assert c.post(f"/places/{p['id']}/checklist/9999", data={"value": "1"}).status_code == 404
 
@@ -154,7 +154,7 @@ def test_today_apply_by_with_items_left(store):
     rows = today.coming_up(store, s, [])
     row = next(r for r in rows if r["kind"] == "key_date")
     assert row["text"] == f"Apply by {helpers.day_text(day)}, in 3 days"
-    n = len(store.list_checklist())
+    n = len(store.visible_checklist())
     assert row["prep"] == f"{n} application items still to do for this place."
     html = local_client(store).get("/today").text
     assert "Apply by" in html and "still to do for this place" in html

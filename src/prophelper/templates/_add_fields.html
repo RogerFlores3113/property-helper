@@ -49,7 +49,7 @@
   {{ field("Pet rent per month", "pet_rent", v.get('pet_rent', ''), kind="number", step="any") }}
   {% endif %}
   {{ field("One-time pet fee", "pet_fee", v.get('pet_fee', ''), kind="number", step="any") }}
-  {{ field("Heaviest dog allowed (lb)", "pet_weight_limit", v.get('pet_weight_limit', ''), kind="number", step="any", hint="For example 50 when dogs must be under 50 lb.") }}
+  {{ field("Heaviest pet allowed (lb)", "pet_weight_limit", v.get('pet_weight_limit', ''), kind="number", step="any", hint="For example 50 when pets must be under 50 lb.") }}
   {{ field("Most pets allowed", "pet_count_limit", v.get('pet_count_limit', ''), kind="number", step="1") }}
   {{ field("Refundable pet deposit", "pet_deposit", v.get('pet_deposit', ''), kind="number", step="any", hint="Comes back when you move out, so it is counted in the cash you need at move-in, not in the monthly cost.") }}
   {{ field("Breed rules", "pet_breed_note", v.get('pet_breed_note', ''), hint="For example: no aggressive breeds.") }}

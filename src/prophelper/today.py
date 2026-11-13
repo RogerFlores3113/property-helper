@@ -196,7 +196,7 @@ def coming_up(store: Store, search: dict[str, Any], rows: list[dict[str, Any]], 
                     "href": f"/places/{t['place_id']}#tours", "date": d, "time": helpers.clock_text(t["starts_at"]),
                     "note": ("with " + t["with_whom"]) if t["with_whom"] else "", "prep": prep_line(t),
                     "warn": close.get(t["id"], "")})
-    total_items = len(store.list_checklist()) if search["mode"] != "buy" else 0
+    total_items = len(store.visible_checklist(search)) if search["mode"] != "buy" else 0
     by_id = {p["id"]: p["stage"] for p in rows}
     for r in store.upcoming_place_dates(days, search_id=sid):
         row = {"when": (r["date"], r["time"] or "00:00"), "kind": "key_date", "label": PLACE_DATE_LABELS.get(r["kind"], "Date"),

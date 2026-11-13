@@ -46,7 +46,7 @@ def test_get_place_shows_move_in_cash_deadline_and_checklist(store):
     s = store.add_search("Rent", "rent")
     p, _ = store.add_place(search_id=s["id"], title="Maple", address="1 M St", price=1500, deposit=1500, application_fee=40)
     store.add_place_date(p["id"], "application_deadline", "2099-03-01", note="by noon")
-    items = store.list_checklist()
+    items = store.visible_checklist()
     assert items
     store.set_place_checklist(p["id"], items[0]["id"], True)
     out = text(call(srv, "get_place", place_id=p["id"]))
