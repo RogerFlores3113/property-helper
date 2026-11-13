@@ -1,0 +1,43 @@
+{# The facts form fields, shared by the place page and the Add page. Needs `v` (a dict of values) and `errors` optional. #}
+{% from "_macros.html" import field, select %}
+<div class="form-grid">
+  <div class="wide">{{ field("Name", "title", v.get('title', ''), hint="Usually the building or the street address. Left empty, the address is used.") }}</div>
+  <div class="wide">{{ field("Street address", "address", v.get('address', '')) }}</div>
+  {{ field("Unit", "unit", v.get('unit', '')) }}
+  {{ field("City", "city", v.get('city', '')) }}
+  {{ field("State", "state", v.get('state', '')) }}
+  {{ field("ZIP", "zip", v.get('zip', '')) }}
+  {{ field("Link to the listing", "url", v.get('url', ''), kind="url") }}
+  {{ field("Where it was listed", "source", v.get('source', '')) }}
+  {{ field("Price per month" if mode != 'buy' else "Price", "price", v.get('price', ''), kind="number", step="any") }}
+  {{ field("Bedrooms (0 for a studio)", "beds", v.get('beds', ''), kind="number", step="0.5") }}
+  {{ field("Bathrooms", "baths", v.get('baths', ''), kind="number", step="0.5") }}
+  {{ field("Square feet", "sqft", v.get('sqft', ''), kind="number") }}
+  {{ select("Laundry", "laundry", [("in_unit", "In the unit"), ("in_building", "In the building"), ("none", "None")], v.get('laundry', ''), blank="Not sure") }}
+  {{ select("Dishwasher", "dishwasher", [("1", "Yes"), ("0", "No")], v.get('dishwasher', '')|string if v.get('dishwasher', '') is not none else '', blank="Not sure") }}
+  {{ select("Parking", "parking", [("garage", "Garage"), ("covered", "Covered"), ("lot", "Lot"), ("street", "Street"), ("none", "None")], v.get('parking', ''), blank="Not sure") }}
+  {{ field("Parking cost per month", "parking_cost", v.get('parking_cost', ''), kind="number", step="any") }}
+  {{ select("Pets", "pets", [("both", "Cats and dogs"), ("cats", "Cats only"), ("dogs", "Dogs only"), ("none", "No pets")], v.get('pets', ''), blank="Not sure") }}
+  {{ field("Pet rent per month", "pet_rent", v.get('pet_rent', ''), kind="number", step="any") }}
+  {{ field("One-time pet fee", "pet_fee", v.get('pet_fee', ''), kind="number", step="any") }}
+  {{ field("Utilities included", "utilities_included", v.get('utilities_included', ''), hint="For example: water, trash, internet. Say 'all' if everything is.") }}
+  {{ field("Utilities estimate per month", "utilities_estimate", v.get('utilities_estimate', ''), kind="number", step="any", hint="What you would pay on top of the rent.") }}
+  {{ field("Year built", "year_built", v.get('year_built', ''), kind="number") }}
+  {{ field("Available from", "available_from", v.get('available_from', ''), kind="date") }}
+  {{ field("Lease starts", "lease_start", v.get('lease_start', ''), kind="date") }}
+  {{ field("Lease ends", "lease_end", v.get('lease_end', ''), kind="date") }}
+  {{ field("Lease length (months)", "lease_months", v.get('lease_months', ''), kind="number") }}
+  {{ field("Security deposit", "deposit", v.get('deposit', ''), kind="number", step="any") }}
+  {{ field("Application fee", "application_fee", v.get('application_fee', ''), kind="number", step="any") }}
+  {{ field("Other monthly fees", "other_monthly_fees", v.get('other_monthly_fees', ''), kind="number", step="any") }}
+  {{ field("Move-in fees", "move_in_fees", v.get('move_in_fees', ''), kind="number", step="any") }}
+  {{ field("Broker fee", "broker_fee", v.get('broker_fee', ''), kind="number", step="any") }}
+  {{ field("HOA per month", "hoa", v.get('hoa', ''), kind="number", step="any") }}
+  {{ field("Property tax per year", "property_tax", v.get('property_tax', ''), kind="number", step="any") }}
+  {{ field("Insurance per year", "insurance", v.get('insurance', ''), kind="number", step="any") }}
+  {{ field("Latitude", "lat", v.get('lat', ''), kind="number", step="any", hint="Optional. Needed for map and commute estimates.") }}
+  {{ field("Longitude", "lng", v.get('lng', ''), kind="number", step="any") }}
+  {{ select("Your rating", "rating", [("1", "1"), ("2", "2"), ("3", "3"), ("4", "4"), ("5", "5")], v.get('rating', '')|string if v.get('rating', '') is not none else '', blank="Not rated") }}
+  <div class="wide">{{ field("Your notes", "notes", v.get('notes', ''), kind="textarea", rows=5, hint="Only you write here. An AI app never changes your notes.") }}</div>
+  <input type="hidden" name="listing_text" value="{{ v.get('listing_text', '') }}">
+</div>
