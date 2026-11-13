@@ -59,7 +59,7 @@ DEFAULT_CHECKLIST: tuple[tuple[str, str], ...] = (
     ("Credit report", ""), ("Renter's insurance quote", ""), ("Pet records", ""),
 )
 DEFAULT_SETTINGS: dict[str, str] = {
-    "ai_model": "claude-sonnet-5-5", "follow_up_days": "3", "map_tiles": "1", "geocode": "0", "show_photos": "0",
+    "ai_model": "claude-sonnet-5-5", "follow_up_days": "3", "map_tiles": "0", "geocode": "0", "show_photos": "0",
     "strict_scraping": "0", "down_payment_pct": "20", "mortgage_rate": "6.5", "loan_years": "30", "pmi_rate_pct": "0.5",
     "closing_cost_pct": "3",
 }
@@ -725,7 +725,12 @@ class Store:
         if self.path != ":memory:":
             self._conn.execute("PRAGMA journal_mode = WAL")
             self._conn.execute("PRAGMA synchronous = NORMAL")
+        had_data = self._conn.execute("PRAGMA user_version").fetchone()["user_version"] >= 1
         self._migrate()
+        if had_data and self._row("SELECT 1 FROM settings WHERE key = 'map_tiles'") is None:
+            # Map pictures are off for a new data folder. A folder from before that change keeps what it had: on.
+            with self._write():
+                self._exec("INSERT OR IGNORE INTO settings(key, value) VALUES ('map_tiles', '1')")
 
     def _migrate(self) -> None:
         with self._lock:

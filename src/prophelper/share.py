@@ -21,7 +21,7 @@ from datetime import date
 from typing import Any
 
 from . import compare, helpers
-from .store import (COMMUTE_MODES, PLACE_INT, PLACE_REAL, PLACE_TEXT, Store, people_slots)
+from .store import (COMMUTE_MODES, PLACE_INT, PLACE_REAL, PLACE_TEXT, Store, normalize_url, people_slots)
 
 FORMAT_NAME = "property-helper-search"
 FORMAT_VERSION = 1
@@ -197,37 +197,94 @@ def read_export(data: bytes) -> dict[str, Any]:
     version = doc.get("version")
     if not isinstance(version, int) or isinstance(version, bool) or version != FORMAT_VERSION:
         raise NotAnExport("That file was made by a different version of Property Helper, so it can't be read here.")
-    search, crits, anchors, places = doc.get("search"), doc.get("criteria", []), doc.get("anchors", []), doc.get("places", [])
-    if not isinstance(search, dict) or not all(isinstance(x, list) for x in (crits, anchors, places)):
-        raise NotAnExport("That shared search file is damaged, so nothing was added.")
+    search = doc.get("search")
+    if not isinstance(search, dict):
+        raise NotAnExport("That shared search file is damaged (it has no search in it), so nothing was added.")
+    lists = []
+    for key in ("criteria", "anchors", "places"):
+        got = doc.get(key, [])
+        lists.append(got if isinstance(got, list) else [])
+    crits, anchors, places = lists
     if len(places) > MAX_PLACES or len(crits) > MAX_CRITERIA or len(anchors) > MAX_ANCHORS:
         raise NotAnExport(f"That file holds more than a search should (over {MAX_PLACES} places), so nothing was added.")
-    if not str(search.get("name") or "").strip():
-        raise NotAnExport("That shared search has no name, so nothing was added.")
-    if not all(isinstance(x, dict) for x in (*crits, *anchors, *places)):
-        raise NotAnExport("That shared search file is damaged, so nothing was added.")
+    # An item that isn't an object is left out and counted; the rest of the file is still used.
+    doc["_not_objects"] = {"places": sum(1 for x in places if not isinstance(x, dict)),
+                           "criteria": sum(1 for x in crits if not isinstance(x, dict)),
+                           "anchors": sum(1 for x in anchors if not isinstance(x, dict))}
+    doc["criteria"] = [x for x in crits if isinstance(x, dict)]
+    doc["anchors"] = [x for x in anchors if isinstance(x, dict)]
+    doc["places"] = [x for x in places if isinstance(x, dict)]
     return doc
 
 
+IMPORT_SUFFIX = " (imported)"
+
+
+def imported_name(name: Any) -> str:
+    """The name the imported search gets: theirs plus " (imported)", so it is never mistaken for one of yours."""
+    base = " ".join(str(name or "").split()) or "Shared search"
+    return base[:200 - len(IMPORT_SUFFIX)].rstrip() + IMPORT_SUFFIX
+
+
 def preview_text(doc: dict[str, Any]) -> str:
-    """'Adds a search named X with 7 places' (the name is cut to a sane length; the page escapes it)."""
-    name = " ".join(str(doc["search"].get("name") or "").split())[:200]
+    """'Adds a search named X (imported) with 7 places' (the name is cut to a sane length; the page escapes it)."""
+    name = imported_name(doc["search"].get("name"))
     n = len(doc["places"])
     return f"Adds a search named {name} with {n} place{'s' if n != 1 else ''}"
+
+
+def left_out_lines(report: dict[str, Any]) -> list[str]:
+    """Plain words for what an import leaves out or cleans, from ``dry_run`` or ``apply_import`` numbers."""
+    def n(k: str) -> int:
+        return int(report.get(k) or 0)
+
+    def s(k: str, one: str, many: str) -> str:
+        return one if n(k) == 1 else many
+
+    out = []
+    if n("places_skipped"):
+        out.append(f"{n('places_skipped')} place{s('places_skipped', '', 's')} can't be read and will be left out.")
+    if n("criteria_skipped"):
+        out.append(f"{n('criteria_skipped')} thing{s('criteria_skipped', '', 's')} that matter{s('criteria_skipped', 's', '')} can't be read and will be left out.")
+    if n("anchors_skipped"):
+        out.append(f"{n('anchors_skipped')} important place{s('anchors_skipped', '', 's')} can't be read and will be left out.")
+    if n("link_unsafe"):
+        out.append(f"{n('link_unsafe')} place{s('link_unsafe', ' has a link that isn' + chr(39) + 't', 's have links that aren' + chr(39) + 't')} a normal web address. "
+                   f"{s('link_unsafe', 'The place is', 'The places are')} kept without {s('link_unsafe', 'its link', 'their links')}.")
+    if n("link_dropped"):
+        out.append(f"{n('link_dropped')} listing link{s('link_dropped', ' is', 's are')} already saved in another search, so "
+                   f"{s('link_dropped', 'that place', 'those places')} will have no link.")
+    return out
+
+
+def dry_run(doc: dict[str, Any]) -> dict[str, Any]:
+    """What ``apply_import`` would do, counted on a throwaway in-memory database. Writes nothing of yours."""
+    scratch = Store(":memory:")
+    try:
+        return apply_import(scratch, doc)
+    except Exception:
+        return {}
+    finally:
+        scratch.close()
 
 
 def apply_import(store: Store, doc: dict[str, Any]) -> dict[str, Any]:
     """Make a NEW search from a checked export. All or nothing for the search itself; a place or a criterion that
     can't be read is skipped and counted. Important places that match one you already have (same name and address)
-    are reused. Returns ``{"search", "places", "skipped", "link_dropped"}``."""
+    are reused. The new search's name gets " (imported)". Returns ``{"search", "places", "skipped", "link_dropped",
+    "link_unsafe", "places_skipped", "criteria_skipped", "anchors_skipped"}`` (``skipped`` is the sum of the three kinds)."""
     s = doc["search"]
-    skipped = dropped = 0
+    not_obj = doc.get("_not_objects") or {}
+    places_skipped = int(not_obj.get("places") or 0)
+    criteria_skipped = int(not_obj.get("criteria") or 0)
+    anchors_skipped = int(not_obj.get("anchors") or 0)
+    dropped = unsafe = 0
     created = 0
     with store._write():
         mode = str(s.get("mode") or "rent")
         fields = {k: s.get(k) for k in ("area", "move_in", "target_close", "budget_max", "people", "people_names") if s.get(k) not in (None, "")}
         fields["hide_dealbreakers"] = bool(s.get("hide_dealbreakers"))
-        search = store.add_search(str(s.get("name") or ""), mode, **fields)
+        search = store.add_search(imported_name(s.get("name")), mode, **fields)
         sid = search["id"]
         existing = store.list_anchors()
         anchor_ids: dict[int, int] = {}
@@ -240,7 +297,7 @@ def apply_import(store: Store, doc: dict[str, Any]) -> dict[str, Any]:
             try:
                 made = match or store.add_anchor(name, addr, a.get("lat"), a.get("lng"))
             except ValueError:
-                skipped += 1
+                anchors_skipped += 1
                 continue
             if match is None:
                 existing.append(made)
@@ -256,19 +313,23 @@ def apply_import(store: Store, doc: dict[str, Any]) -> dict[str, Any]:
                 store.add_criterion(sid, str(c.get("kind") or ""), label=str(c.get("label") or ""), weight=c.get("weight", 10),
                                     dealbreaker=c.get("dealbreaker"), target=target)
             except (ValueError, TypeError):
-                skipped += 1
+                criteria_skipped += 1
         for item in doc["places"]:
             fields = {k: item[k] for k in (*SHARED_TEXT, *SHARED_REAL, *SHARED_INT, "photo_urls", "dishwasher") if k in item}
+            if "url" in fields and not (isinstance(fields["url"], str) and normalize_url(fields["url"])):
+                if fields["url"] not in (None, ""):
+                    unsafe += 1  # the place is kept, the link is not
+                fields.pop("url")
             if fields.get("url") and store.find_duplicate(url=str(fields["url"])) is not None:
                 fields.pop("url")  # a link is saved once across all searches; this one is already in use
                 dropped += 1
             try:
                 place, made_new = store.add_place(search_id=sid, by="you", **fields)
             except (ValueError, TypeError):
-                skipped += 1
+                places_skipped += 1
                 continue
             if not made_new:
-                skipped += 1
+                places_skipped += 1
                 continue
             created += 1
             for cm in item.get("commutes") or []:
@@ -277,8 +338,10 @@ def apply_import(store: Store, doc: dict[str, Any]) -> dict[str, Any]:
                     if isinstance(idx, int) and not isinstance(idx, bool) and idx in anchor_ids and str(cm.get("mode")) in COMMUTE_MODES:
                         store.set_commute(place["id"], anchor_ids[idx], str(cm["mode"]), cm.get("minutes"), "you")
                 except (ValueError, TypeError, AttributeError):
-                    skipped += 1
-    return {"search": store.get_search(sid), "places": created, "skipped": skipped, "link_dropped": dropped}
+                    pass  # a travel time that can't be read is simply not added
+    return {"search": store.get_search(sid), "places": created, "link_dropped": dropped, "link_unsafe": unsafe,
+            "places_skipped": places_skipped, "criteria_skipped": criteria_skipped, "anchors_skipped": anchors_skipped,
+            "skipped": places_skipped + criteria_skipped + anchors_skipped}
 
 
 # --------------------------------------------------------------------------- a file waiting for "Add it"
@@ -319,4 +382,4 @@ def opinions_for(store: Store, place_id: int) -> list[dict[str, Any]]:
         return []
 
 
-__all__ = ["people_slots", "comparison_html", "export_bytes", "read_export", "apply_import"]
+__all__ = ["people_slots", "comparison_html", "export_bytes", "read_export", "apply_import", "dry_run", "left_out_lines", "imported_name"]

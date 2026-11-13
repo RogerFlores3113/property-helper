@@ -23,7 +23,7 @@ def map_page(request: Request, anchor: str = "", show_hidden: int = 0):
     store = get_store(request)
     search = store.current_search()
     anchors = store.list_anchors()
-    tiles = store.get_setting_bool("map_tiles", True)
+    tiles = store.get_setting_bool("map_tiles")
     if search is None:
         return render(request, "map.html", search=None, anchors=anchors, chosen=None, tiles=tiles, data=mapdata.build([], anchors, tiles=tiles, anchor=None)["data"],
                       located=[], unlocated=[], hidden=0, show_hidden=False, geocode=False)
@@ -40,6 +40,13 @@ def map_page(request: Request, anchor: str = "", show_hidden: int = 0):
     return render(request, "map.html", search=search, anchors=anchors, chosen=chosen, no_rings=(wanted == 0), tiles=tiles, data=built["data"],
                   located=built["located"], unlocated=built["unlocated"], hidden=hidden, show_hidden=bool(show_hidden),
                   geocode=store.get_setting_bool("geocode"))
+
+
+@router.post("/map/tiles", include_in_schema=False)
+def show_street_map(request: Request):
+    """The one button on the plain map: turn map pictures on (same switch as Settings)."""
+    get_store(request).set_setting("map_tiles", "1")
+    return redirect("/map", notice="Street map is on. Your browser now loads map pictures from OpenStreetMap when you open the Map. You can turn it off in Settings.")
 
 
 @router.post("/places/{place_id}/location", include_in_schema=False)

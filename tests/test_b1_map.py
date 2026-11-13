@@ -83,6 +83,7 @@ def test_ring_choice_and_no_rings(client, sample_store):
 
 
 def test_tiles_on_and_off(client, sample_store):
+    sample_store.set_setting("map_tiles", "1")
     on = client.get("/map").text
     data = _page_data(on)
     assert data["tiles"] is True and data["tileUrl"] == "https://tile.openstreetmap.org/{z}/{x}/{y}.png"
@@ -90,7 +91,7 @@ def test_tiles_on_and_off(client, sample_store):
     sample_store.set_setting("map_tiles", "0")
     off = client.get("/map").text
     assert _page_data(off)["tiles"] is False
-    assert "Map pictures are off" in off and "Show map pictures" in off
+    assert "Show street map (loads map pictures from OpenStreetMap)" in off
 
 
 def test_find_on_map_button_is_always_shown(client, sample_store):

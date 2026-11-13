@@ -18,6 +18,7 @@
   </h2>
   <p class="web-warning"><strong>Use the Claude app on this computer. Claude on the web (claude.ai in your browser) can't reach apps on your computer, so it won't work for this.</strong></p>
   <p>{{ claude.blurb }}</p>
+  <p class="fine">Claude's tools can read your notes and ratings on places when you ask Claude about them. Nothing is sent anywhere until you use Claude.</p>
   <p class="fine"><strong>The short way:</strong> press the button below, then in Claude type <em>Add this listing to Property Helper</em>.</p>
   {% set missing = not claude.installed and not claude.connected %}
   {% if missing %}
