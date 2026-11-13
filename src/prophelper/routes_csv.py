@@ -16,7 +16,7 @@ from datetime import datetime
 from fastapi import APIRouter, Request
 from fastapi.responses import HTMLResponse, Response
 
-from . import csv_io
+from . import csv_io, enrich
 from .deps import get_store, redirect, render
 from .routes_data import TooBig, read_form
 from .store import NotFound
@@ -152,5 +152,6 @@ def places_csv(request: Request, search_id: int | None = None, stage: str = "", 
     places = store.list_places(search_id, stage=stage or None, query=q or None)
     slug = re.sub(r"[^a-z0-9]+", "-", search["name"].lower()).strip("-")[:40] or "places"
     name = f"places-{slug}-{datetime.now().strftime('%Y-%m-%d')}.csv"
-    return Response(csv_io.export_csv(places), media_type="text/csv; charset=utf-8",
+    rows = enrich.enrich_places(store, search, places)
+    return Response(csv_io.export_csv(rows, store.list_anchors(), search.get("people") or 1), media_type="text/csv; charset=utf-8",
                     headers={"Content-Disposition": f'attachment; filename="{name}"', "Cache-Control": "no-store"})
