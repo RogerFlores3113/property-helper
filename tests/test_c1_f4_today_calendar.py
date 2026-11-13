@@ -11,6 +11,11 @@ from prophelper.routes_calendar import calendar_items, ics_items
 from prophelper.store import Store
 
 
+# time.tzset exists only on Unix. On Windows the TZ variable is ignored, and the
+# test still checks that the exported time is floating local time.
+_tzset = getattr(time, "tzset", lambda: None)
+
+
 def _day(n: int) -> str:
     return (date.today() + timedelta(days=n)).isoformat()
 
@@ -27,7 +32,7 @@ def _place(store, s, title="Maple", **kw):
 # --------------------------------------------------------------------------- calendar file
 def test_ten_am_tour_exports_as_floating_local_time(store, monkeypatch):
     monkeypatch.setenv("TZ", "America/Chicago")
-    time.tzset()
+    _tzset()
     try:
         s = _rent(store)
         p = _place(store, s, address="1 Main St")
@@ -39,7 +44,7 @@ def test_ten_am_tour_exports_as_floating_local_time(store, monkeypatch):
         assert "DTSTART:20261121T100000Z" not in text
     finally:
         monkeypatch.undo()
-        time.tzset()
+        _tzset()
 
 
 def test_all_day_dates_stay_date_values(store):
