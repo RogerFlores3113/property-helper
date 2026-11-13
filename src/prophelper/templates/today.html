@@ -56,6 +56,19 @@
 </section>
 {% endif %}
 
+{% if near_miss %}
+<section class="card" aria-labelledby="near-h">
+  <h2 id="near-h">Near miss <span class="count">{{ near_miss|length|num }}</span></h2>
+  <ul class="items">
+    {% for n in near_miss %}
+    <li class="item"><div class="item-main"><a class="item-title" href="/places/{{ n.place.id }}">{{ n.place.title }}</a>
+      <span class="item-sub">{{ n.text }}</span></div></li>
+    {% endfor %}
+  </ul>
+  <p class="fine">These miss your budget by under 3 percent and nothing else. They are not in Best fits.</p>
+</section>
+{% endif %}
+
 {% if late %}
 <section class="card" aria-labelledby="late-h">
   <h2 id="late-h">Heads up on move-in <span class="count">{{ late|length|num }}</span></h2>

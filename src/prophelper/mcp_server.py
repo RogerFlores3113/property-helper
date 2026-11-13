@@ -259,7 +259,7 @@ def _mode_word(mode: Any) -> str:
 def _pet_profile(s: dict[str, Any]) -> str:
     """"dog, 60 lb, 1 pet" from the search's pet profile, or ''."""
     kind = str(s.get("pet_kind") or "")
-    if not kind:
+    if not kind or kind == "none":
         return ""
     bits = [kind]
     if s.get("pet_weight"):
