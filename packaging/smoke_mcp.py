@@ -75,6 +75,13 @@ async def main(exe: str | None) -> None:
             assert junk.isError and "doesn't take nonsense" in junk.content[0].text, junk
             today = await s.call_tool("todays_list", {})
             assert not today.isError, today
+            assert "Best fits right now" in today.content[0].text, today  # the same Today as the app window
+            jump = await s.call_tool("add_place", {"title": "Jump", "address": "9 Jump St", "stage": "Applied"})
+            assert jump.isError and "one stage at a time" in jump.content[0].text, jump  # the one-step rule holds on add too
+            bad = await s.call_tool("create_search", {"name": "Bad", "people": 2, "criteria": [{"kind": "nope"}]})
+            assert bad.isError and "Nothing was saved" in bad.content[0].text, bad  # all or nothing
+            shared = await s.call_tool("create_search", {"name": "Shared", "people": 2})
+            assert not shared.isError and "2 people" in shared.content[0].text, shared
     print(f"MCP smoke test passed: {command} {' '.join(args)}")
 
 

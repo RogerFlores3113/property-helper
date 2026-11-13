@@ -110,7 +110,7 @@ PLACE_PARAMS: list[tuple[str, Any, str]] = [
     ("parking_cost", float | str, "Monthly parking cost"),
     ("pets", str, "cats, dogs, both or none"),
     ("pet_rent", float | str, "Monthly pet rent"), ("pet_fee", float | str, "One-time pet fee"),
-    ("utilities_included", str, "What the rent covers, in words (for example 'water and trash')"),
+    ("utilities_included", str | bool, "What the rent covers, in words (for example 'water and trash', or 'all utilities'). false means none"),
     ("utilities_estimate", float | str, "Monthly utilities the user would pay on top (only if you really know)"),
     ("year_built", int | str, ""),
     ("available_from", str, "Date, YYYY-MM-DD"), ("lease_start", str, "Date, YYYY-MM-DD"), ("lease_end", str, "Date, YYYY-MM-DD"),
