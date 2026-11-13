@@ -67,7 +67,10 @@
 
   <section class="card">
     {% if counts.new + counts.match %}
-    <p><button type="submit" class="btn primary" formaction="/import/apply">Import {{ counts.new + counts.match }} row{{ 's' if counts.new + counts.match != 1 }}</button>
+    <p>{% if counts.new %}<strong>{{ counts.new|num }}</strong> new place{{ 's' if counts.new != 1 }} will be added.{% else %}No new places will be added.{% endif %}
+      {% if counts.match %}Empty details are filled in on <strong>{{ counts.match|num }}</strong> you already have.{% endif %}
+      {% if counts.skip + counts.repeat %}<strong>{{ (counts.skip + counts.repeat)|num }}</strong> row{{ 's' if counts.skip + counts.repeat != 1 }} will be left out (listed above).{% endif %}</p>
+    <p><button type="submit" class="btn primary" formaction="/import/apply">{% if counts.new %}Add {{ counts.new|num }} new place{{ 's' if counts.new != 1 }}{% if counts.match %} and fill in {{ counts.match|num }}{% endif %}{% else %}Fill in {{ counts.match|num }} place{{ 's' if counts.match != 1 }} you already have{% endif %}</button>
     <a class="btn" href="/import">Start over</a></p>
     {% else %}
     <p>Nothing would be imported with these matches. Match a title, address or link column and update the preview, or <a href="/import">start over</a>.</p>

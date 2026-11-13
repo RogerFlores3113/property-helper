@@ -195,6 +195,20 @@ def _cell(row: list[str], i: int) -> str:
     return row[i].strip() if i < len(row) else ""
 
 
+_NUMBER_EXAMPLES = {"price": "1450", "beds": "2", "baths": "1.5", "sqft": "850", "deposit": "1450", "application_fee": "50",
+                    "parking_cost": "75", "pet_rent": "35", "pet_fee": "300", "utilities_estimate": "90", "other_monthly_fees": "25",
+                    "move_in_fees": "150", "broker_fee": "1450", "hoa": "250", "property_tax": "3600", "insurance": "1200",
+                    "year_built": "1998", "lease_months": "12", "rating": "4", "lat": "40.11", "lng": "-88.24"}
+
+
+def _cell_problem(field: str, exc: Exception) -> str:
+    """A plain note for one bad cell, naming the column by its label ("Price needs to be a number, like 1450")."""
+    label = FIELD_LABELS.get(field, field)
+    if "needs to be a number" in str(exc):
+        return f"{label} needs to be a number, like {_NUMBER_EXAMPLES.get(field, '12')}. It is left empty."
+    return f"{label}: {str(exc).rstrip('.')}. It is left empty."
+
+
 def plan_import(store: Store, search_id: int, headers: list[str], rows: list[list[str]], mapping: dict[int, str]) -> list[dict[str, Any]]:
     """What importing would do, row by row. Writes nothing.
 
@@ -229,7 +243,7 @@ def plan_import(store: Store, search_id: int, headers: list[str], rows: list[lis
             try:
                 values.update(store._clean_place({field: text}, partial=True))  # checks one cell; touches no data
             except ValueError as exc:
-                item["warnings"].append(f"{FIELD_LABELS.get(field, field)}: {exc} (left empty)")
+                item["warnings"].append(_cell_problem(field, exc))
         if raw.get("stage"):
             norm = st.normalize_stage(mode, raw["stage"])
             if norm is None:

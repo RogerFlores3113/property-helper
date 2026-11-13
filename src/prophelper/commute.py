@@ -124,3 +124,47 @@ def top_commute(place: dict[str, Any], anchors: Iterable[dict[str, Any]], stored
             best = min(options, key=lambda r: r["minutes"])
             return {"anchor": a.get("name", ""), "anchor_id": a.get("id"), **best}
     return None
+
+
+def criterion_modes(criteria: Iterable[dict[str, Any]], anchors: Iterable[dict[str, Any]]) -> dict[Any, str]:
+    """{anchor id: mode} from the commute criteria (a criterion with no place means the first important place)."""
+    anchors = list(anchors)
+    first = anchors[0]["id"] if anchors else None
+    out: dict[Any, str] = {}
+    for c in criteria:
+        if c.get("kind") == "commute":
+            out.setdefault(c["target"].get("anchor_id") or first, c["target"].get("mode") or "bike")
+    return out
+
+
+def pick_for_anchor(place: dict[str, Any], anchor: dict[str, Any], stored: Iterable[dict[str, Any]] = (),
+                    mode: str | None = None) -> tuple[str | None, dict[str, Any] | None]:
+    """(mode, answer) shown for one important place: the criterion's ``mode`` when it has an answer, else the fastest
+    known way (walk, bike or drive). ``(mode, None)`` when nothing is known."""
+    stored = list(stored)
+    if mode:
+        found = resolve(place, anchor, mode, stored)
+        if found:
+            return mode, found
+    options = [(m, r) for m in ("walk", "bike", "drive") if (r := resolve(place, anchor, m, stored))]
+    if options:
+        return min(options, key=lambda o: o[1]["minutes"])
+    return mode, None
+
+
+def place_rows(place: dict[str, Any], anchors: Iterable[dict[str, Any]], stored: Iterable[dict[str, Any]] = (),
+               criteria: Iterable[dict[str, Any]] = ()) -> list[dict[str, Any]]:
+    """One row per important place for the place page: ``{"anchor", "mode", "found", "others", "anchor_has_point",
+    "place_has_point"}``. ``mode`` is the way of that place's commute criterion (fastest known when there is none) and
+    ``others`` are the remaining ways, each ``{"mode", "found"}``, to fold under "Other ways"."""
+    stored = list(stored)
+    anchors = list(anchors)
+    crit = criterion_modes(criteria, anchors)
+    rows = []
+    for a in anchors:
+        mode, found = pick_for_anchor(place, a, stored, crit.get(a["id"]))
+        mode = mode or "bike"
+        others = [{"mode": m, "found": resolve(place, a, m, stored)} for m in MODES if m != mode]
+        rows.append({"anchor": a, "mode": mode, "found": found, "others": others,
+                     "anchor_has_point": has_point(a), "place_has_point": has_point(place)})
+    return rows

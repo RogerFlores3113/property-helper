@@ -100,7 +100,24 @@ def _year(v: Any) -> dict[str, Any]:
 
 def unknown_list(p: dict[str, Any]) -> list[str]:
     """What is really unknown about an enriched place: criteria with no value and costs not filled in."""
-    return list(dict.fromkeys([*p["score"]["unknown"], *p["cost"]["missing"]]))
+    return list(dict.fromkeys([*p["score"]["unknown"], *p["cost"]["missing"], *guessed_list(p)]))
+
+
+def guessed_list(p: dict[str, Any]) -> list[str]:
+    """Costs that are only an estimate, worded "Utilities (a guess)" (their line label already says so)."""
+    out = []
+    for line in p["cost"].get("lines", []):
+        if line.get("estimated") and line.get("amount") is not None:
+            label = line["label"]
+            out.append(label if "guess" in label.lower() else f"{label} (a guess)")
+    return out
+
+
+def _not_counted_text(p: dict[str, Any]) -> str:
+    if p["cost"]["missing"]:
+        return ", ".join(p["cost"]["missing"])
+    guessed = guessed_list(p)
+    return "nothing left out, but " + ", ".join(guessed) if guessed else "nothing, all costs are in"
 
 
 def _num(v: Any, suffix: str = "") -> dict[str, Any]:
@@ -193,7 +210,7 @@ def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
             amount = found["amount"] if found else None
             cells.append(_money(amount, True) if amount is not None else _cell(None))
         cost_rows.append(_row("cost-" + key, label, cells, "low", only_if_any=True))
-    cost_rows.append(_row("missing", "Not counted yet", [_plain(", ".join(p["cost"]["missing"]) or "nothing, all costs are in") for p in places]))
+    cost_rows.append(_row("missing", "Not counted yet", [_plain(_not_counted_text(p)) for p in places]))
     section("What it really costs, line by line", cost_rows)
 
     # ---- the facts

@@ -198,8 +198,8 @@ def test_still_unknown_lists_what_is_unknown(store):
     places = [_row(store, s, p) for p in (a, b)]
     rows = {r["key"]: r for sec in compare.build_rows(places) for r in sec["rows"]}
     assert "500" in rows["unknown"]["cells"][0]["text"] or "Size" in rows["unknown"]["cells"][0]["text"]
-    assert rows["unknown"]["cells"][1]["text"].startswith("nothing")
-    assert compare.unknown_list(places[0]) and not compare.unknown_list(places[1])
+    assert rows["unknown"]["cells"][1]["text"] == "Utilities (a guess)"
+    assert compare.unknown_list(places[0]) and compare.unknown_list(places[1]) == ["Utilities (a guess)"]
 
 
 def test_incomplete_cost_is_not_marked_lowest(store):
