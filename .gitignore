@@ -13,3 +13,6 @@ data/
 /*.html
 /t[0-9]*.py
 /app[0-9]*.html
+
+# agent worktrees
+.claude/
