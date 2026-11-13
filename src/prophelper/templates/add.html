@@ -18,10 +18,16 @@
     {{ select("Which search", "search_id", search_options, chosen) }}
     <p>{{ button("Read the listing", kind="primary") }} <a class="btn" href="/add?manual=1">Type it in myself</a></p>
   </form>
+  <p class="fine">Have a spreadsheet of places? <a href="/import">Import a CSV file</a>. You see a preview first.</p>
 </section>
 {% else %}
 <section class="card">
-  {% if found %}<p>Filled in from what you pasted: {{ found|reject('in', ('url', 'listing_text'))|join(', ') or 'just the link' }}. Check it, fix anything that is wrong, and save.</p>
+  {% set labels = {"title": "title", "address": "address", "unit": "unit", "city": "city", "state": "state", "zip": "ZIP", "price": "rent", "beds": "bedrooms", "baths": "bathrooms", "sqft": "square feet", "laundry": "laundry", "parking": "parking", "pets": "pets", "dishwasher": "dishwasher", "utilities_included": "utilities included", "available_from": "available date", "lease_months": "lease length", "year_built": "year built", "deposit": "deposit", "application_fee": "application fee", "parking_cost": "parking cost", "pet_rent": "pet rent", "pet_fee": "pet fee", "other_monthly_fees": "other monthly fees", "hoa": "HOA", "property_tax": "property tax", "broker_fee": "broker fee", "move_in_fees": "move-in fees", "utilities_estimate": "utilities estimate", "source": "website"} %}
+  {% set got = [] %}{% for k in found %}{% if k in labels %}{% set _ = got.append(labels[k]) %}{% endif %}{% endfor %}
+  {% set missing = [] %}{% for k in ["price", "beds", "baths", "address", "laundry", "parking", "pets", "available_from"] %}{% if k not in found %}{% set _ = missing.append(labels[k]) %}{% endif %}{% endfor %}
+  {% if found %}
+  <p>Filled in from what you pasted: {{ got|join(', ') or 'just the link' }}. Check it, fix anything that is wrong, and save.</p>
+  {% if text %}<p class="fine">Not found in the text, so left empty: {{ missing|join(', ') if missing else 'nothing important' }}. Add them below if you know them.</p>{% endif %}
   {% else %}<p>Fill in what you know. You can add the rest later.</p>{% endif %}
   <form method="post" action="/add/save" class="stack">
     {{ select("Add to which search", "search_id", search_options, chosen) }}
