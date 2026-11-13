@@ -65,11 +65,9 @@
       {{ field("Move in by", "move_in", shown.move_in or '', kind="date") }}
       {{ field("Target close date", "target_close", shown.target_close or '', kind="date") }}
       {{ field("People sharing the cost", "people", shown.people or 1, kind="number", step="1", hint="Rent or payment split between this many people. Place pages, the board and Compare then show a per-person cost.") }}
-      {% if shown.mode != 'buy' %}
       {{ select("Your pets", "pet_kind", [("cat", "A cat"), ("dog", "A dog"), ("both", "Cats and dogs")], shown.pet_kind or '', blank="No pets") }}
       {{ field("How heavy your dog is (lb)", "pet_weight", shown.pet_weight if shown.pet_weight is not none else '', kind="number", step="any", hint="A place that only allows smaller dogs then shows as not fitting your pets.") }}
       {{ field("How many pets", "pet_count", shown.pet_count if shown.pet_count is not none else '', kind="number", step="1") }}
-      {% endif %}
     </div>
     {{ field("Names of the people sharing", "people_names", shown.people_names|join(', '), hint="Only when more than one person shares the cost. Separate the names with commas, like Sam, Priya. Each person can then rate every place and add a short note on its page.") }}
     {{ field("Notes", "notes", shown.notes, kind="textarea", rows=3) }}
@@ -101,7 +99,7 @@
   <h3>Add something that matters</h3>
   <form method="post" action="/search/{{ shown.id }}/criteria" class="stack" data-kind-form>
     <div class="field"><label for="nc-kind">What kind</label>
-      <select id="nc-kind" name="kind" data-kind-select>{% for k in CRITERION_KINDS %}<option value="{{ k }}">{{ KIND_LABELS.get(k, k) }}</option>{% endfor %}</select></div>
+      <select id="nc-kind" name="kind" data-kind-select>{% for k in CRITERION_KINDS %}<option value="{{ k }}">{{ "Price" if k == 'price' and shown.mode == 'buy' else KIND_LABELS.get(k, k) }}</option>{% endfor %}</select></div>
     <div class="field"><label for="nc-label">Name (optional)</label><input id="nc-label" name="label" type="text" placeholder="Left empty, a plain name is made for you"></div>
     <div class="crit-form">
       <div class="field" data-kinds="price"><label for="nc-max">{{ "Price: most you'd pay for the home" if shown.mode == 'buy' else 'Price: most per month, all in' }}</label><input id="nc-max" name="t_max" type="number" step="any"></div>

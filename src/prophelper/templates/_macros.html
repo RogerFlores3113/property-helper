@@ -52,9 +52,9 @@
   <label for="{{ fid }}">{{ label }}</label>
   {% if error %}<div class="field-error" id="{{ fid }}-err" role="alert">{{ error }}</div>{% endif %}
   {% if kind == "textarea" -%}
-  <textarea id="{{ fid }}" name="{{ name }}" rows="{{ rows }}" placeholder="{{ placeholder }}"{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}>{{ value }}</textarea>
+  <textarea id="{{ fid }}" name="{{ name }}" rows="{{ rows }}" placeholder="{{ placeholder }}"{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}>{{ "" if value is none else value }}</textarea>
   {%- else -%}
-  <input id="{{ fid }}" type="{{ kind }}" name="{{ name }}" value="{{ value }}" placeholder="{{ placeholder }}"{% if step %} step="{{ step }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if error %} aria-invalid="true" aria-describedby="{{ fid }}-err"{% endif %}>
+  <input id="{{ fid }}" type="{{ kind }}" name="{{ name }}" value="{{ "" if value is none else value }}" placeholder="{{ placeholder }}"{% if step %} step="{{ step }}"{% endif %}{% if required %} required{% endif %}{% if autofocus %} autofocus{% endif %}{% if error %} aria-invalid="true" aria-describedby="{{ fid }}-err"{% endif %}>
   {%- endif %}
   {% if hint %}<div class="hint">{{ hint }}</div>{% endif %}
 </div>

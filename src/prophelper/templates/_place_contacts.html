@@ -19,7 +19,7 @@
     <div class="item-actions"><form class="inline" method="post" action="/places/{{ place.id }}/contacts/{{ c.id }}/unlink">{{ button("Take off", small=True, aria="Take " ~ c.name ~ " off this place") }}</form></div></li>
     {% endfor %}
   </ul>
-  {% else %}<p class="fine">Nobody linked yet. Add the leasing office or landlord so you can see who still owes you a reply.</p>{% endif %}
+  {% else %}<p class="fine">Nobody linked yet. Add {{ 'the listing agent or your own agent' if search.mode == 'buy' else 'the leasing office or landlord' }} so you can see who still owes you a reply.</p>{% endif %}
 
   {% if _linked %}
   <h3>Log a conversation</h3>

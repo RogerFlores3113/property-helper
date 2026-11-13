@@ -41,7 +41,8 @@ def test_skill_files_are_well_formed_and_carry_the_rules(path):
     named = set(re.findall(r"`([a-z]+(?:_[a-z]+)+)`", body)) - {"in_unit", "in_building", "listing_text", "ai_notes", "min_score", "max_cost",
                                                                   "add_criteria_list"}
     unknown = {n for n in named if n not in TOOLS and n not in ("lease_months", "year_built", "available_from", "other_monthly_fees",
-                                                                 "utilities_included", "move_in_fees", "pet_fee", "application_fee", "photo_urls")}
+                                                                 "utilities_included", "move_in_fees", "pet_fee", "application_fee", "photo_urls",
+                                                                     "pet_kind", "pet_weight", "pet_count", "fenced_yard")}
     assert not unknown, unknown
 
 

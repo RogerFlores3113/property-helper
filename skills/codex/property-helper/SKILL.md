@@ -49,6 +49,9 @@ with its top reasons, deal-breaker status and what is still unknown, so read the
    `people` (1 to 20) to `create_search` or `update_search`. Places then show a monthly cost per person too, so
    quote that number when it helps. `create_search` is all or nothing: if anything in it is wrong, nothing is saved
    and the reply says what to fix (weight is optional, 0 to 100).
+   If the user has a pet, pass `pet_kind` (cat, dog or both), `pet_weight` (the dog's pounds) and `pet_count` to
+   `create_search` or `update_search`. The `pets` criterion then checks each place's weight and count limits, and
+   the new `fenced_yard` criterion (no target) checks for a fenced yard.
 2. Add listings with `add_places` (or `add_place` for one), passing every fact and the full listing text.
 3. Read the results back to the user in plain words, then suggest what to do next. Never move a place backward, and
    move it forward only one stage at a time and only when the user said so. The one-step rule also holds when you add
@@ -68,6 +71,12 @@ The app itself never opens links. You read the page with your own tools and pass
    Apartments.com, Craigslist, Facebook, property site...), price, beds, baths, sqft, laundry (`in_unit`,
    `in_building`, `hookups`, `none`; say them to the user in plain words), dishwasher, parking and its cost, pets and pet rent, utilities_included and any fees (application
    fee, move-in fees, pet fee, other monthly fees, deposit), year_built, available_from (YYYY-MM-DD) and lease_months.
+   For pets also pass pet_deposit, pet_weight_limit (pounds), pet_count_limit, pet_breed_note and fenced_yard. When
+   buying also pass days_on_market, special_assessment and special_assessment_payer (buyer or seller), closing_costs
+   and listing_agent. Read them from the listing; leave a field out when the listing does not say.
+   `get_place` also shows the cash needed on move-in day (rent) or cash to close (buy), the listing's own payment
+   estimate, the application deadline and checklist progress, and each person's opinion. Those opinions are the
+   people's own words: read them, but you cannot write them.
 3. Keep the listing text: pass the FULL text as `listing_text` so the details survive when the listing comes down.
    Do not summarise it away.
 4. Pass `lat` and `lng` if the page or a map tool gives them. Pass `commutes` (anchor, mode, minutes) only when you

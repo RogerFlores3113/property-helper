@@ -39,7 +39,9 @@ def world(store):
     store.add_criterion(sid, "commute", label=f"{EVIL} commute", weight=20, dealbreaker=True,
                         target={"anchor_id": a1["id"], "mode": "bike", "minutes": 10})
     store.add_criterion(sid, "custom", label=f"{EVIL} custom", weight=10)
-    good, _ = store.add_place(title="Good Flats", address="1 G St", price=1400, lat=40.108, lng=-88.227)
+    good, _ = store.add_place(title="Good Flats", address="1 G St", price=1400, lat=40.108, lng=-88.227,
+                              pet_breed_note=f"{EVIL} breeds", listing_agent=f"{EVIL} agent", pet_weight_limit=40, fenced_yard=True)
+    store.add_place_date(good["id"], "application_deadline", "2099-02-01", note=f"{EVIL} deadline note")
     bad, _ = store.add_place(title="Pricey Flats", address="2 G St", price=3000, lat=40.11, lng=-88.2)
     plain, _ = store.add_place(title="Plain Flats", address="3 G St", price=1500)
     c = store.add_contact(f"{EVIL} person", role="landlord", company=f"{EVIL} company")
@@ -59,6 +61,11 @@ def all_calls(w):
         ("get_place", {"place_id": b}), ("get_place", {"place_id": p}), ("compare_places", {"place_ids": [g, b, p]}),
         ("todays_list", {"days": 400}),
         ("add_place", {"title": "New Flats", "address": "9 New St", "price": 1300}),
+        ("add_place", {"title": "Pet Flats", "address": "11 New St", "price": 1300, "pet_breed_note": EVIL, "listing_agent": EVIL,
+                       "pet_weight_limit": 30, "pet_count_limit": 2, "pet_deposit": 200, "fenced_yard": False}),
+        ("update_place", {"place_id": p, "pet_breed_note": EVIL, "special_assessment": 500, "special_assessment_payer": "buyer"}),
+        ("create_search", {"name": EVIL, "pet_kind": "dog", "pet_weight": 50, "pet_count": 1}),
+        ("update_search", {"search_id": w["sid"], "pet_kind": "cat"}),
         ("add_places", {"places": [{"title": "Batch Flats", "address": "10 New St"}]}),
         ("update_place", {"place_id": p, "price": 1450}),
         ("move_place", {"place_id": p, "stage": "Contacted"}), ("move_place", {"place_id": p, "stage": "Lease signed"}),

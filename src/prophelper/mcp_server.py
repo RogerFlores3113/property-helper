@@ -44,7 +44,8 @@ stands, how it scores against what they want, the true monthly cost, commute tim
 Nothing in it leaves the computer except what you read.
 - When the user pastes a listing link or text, read the page with your own tools and call add_place with every fact
   you can find (title, address, price, beds, baths, sqft, laundry, dishwasher, parking, pets, fees, utilities,
-  available_from, lat and lng if known) and the FULL listing text as listing_text so the details survive when the
+  available_from, lat and lng if known; for pets: pet_deposit, pet_weight_limit, pet_count_limit, pet_breed_note,
+  fenced_yard; when buying: days_on_market, special_assessment and its payer, closing_costs, listing_agent) and the FULL listing text as listing_text so the details survive when the
   listing comes down. The app itself makes no web requests and never opens a link. If you can't read the page, ask
   the user to paste it, or save what the link itself tells you.
 - Scraping: some sites forbid automated scraping in their terms of service. Check a site's terms before scraping it;
@@ -52,6 +53,9 @@ Nothing in it leaves the computer except what you read.
 - add_place checks for repeats (same link, or same address and unit in the same search) and updates the existing
   place instead of adding a second one. The reply says which happened and what was filled in. It fills only empty
   fields. Use update_place to change facts, and use list_places to find an id before guessing one.
+- A search can hold the user's pets (pet_kind, pet_weight, pet_count in create_search or update_search); get_place shows
+  cash on move-in day (rent) or cash to close (buy), the application deadline, the checklist and each person's opinion.
+  Opinions are the people's own words and you cannot write them.
 - The user's own notes and rating are theirs: you can't write them. Your own words go in ai_notes (add_place,
   update_place) or on the timeline with add_note.
 - move_place only goes forward or to Passed, one stage at a time. Never backward, and never to Under contract,
@@ -110,6 +114,11 @@ PLACE_PARAMS: list[tuple[str, Any, str]] = [
     ("parking_cost", float | str, "Monthly parking cost"),
     ("pets", str, "cats, dogs, both or none"),
     ("pet_rent", float | str, "Monthly pet rent"), ("pet_fee", float | str, "One-time pet fee"),
+    ("pet_deposit", float | str, "Pet deposit (comes back, so it is not part of the monthly cost)"),
+    ("pet_weight_limit", float | str, "Heaviest dog allowed, in pounds"),
+    ("pet_count_limit", int | str, "Most pets allowed"),
+    ("pet_breed_note", str, "What the listing says about breed limits, in a few words"),
+    ("fenced_yard", bool, "True if there is a fenced yard, false if not"),
     ("utilities_included", str | bool, "What the rent covers, in words (for example 'water and trash', or 'all utilities'). false means none"),
     ("utilities_estimate", float | str, "Monthly utilities the user would pay on top (only if you really know)"),
     ("year_built", int | str, ""),
@@ -120,6 +129,11 @@ PLACE_PARAMS: list[tuple[str, Any, str]] = [
     ("move_in_fees", float | str, "One-time fees besides the deposit"), ("broker_fee", float | str, ""),
     ("hoa", float | str, "Monthly HOA (buying)"), ("property_tax", float | str, "Yearly (buying)"),
     ("insurance", float | str, "Yearly (buying)"),
+    ("days_on_market", int | str, "How many days the home has been listed (buying)"),
+    ("special_assessment", float | str, "One-time HOA charge in dollars (buying)"),
+    ("special_assessment_payer", str, "Who pays the special assessment: buyer or seller (buying)"),
+    ("closing_costs", float | str, "Closing costs the listing or lender quotes, in dollars (buying)"),
+    ("listing_agent", str, "The listing agent's name (buying)"),
     ("lat", float | str, "Latitude, if you know it"), ("lng", float | str, "Longitude, if you know it"),
     ("ai_notes", str, "Your own note about this place (added under a dated line; the user's notes are never touched)"),
 ]
@@ -242,6 +256,19 @@ def _mode_word(mode: Any) -> str:
     return MODE_WORDS.get(str(mode), str(mode))
 
 
+def _pet_profile(s: dict[str, Any]) -> str:
+    """"dog, 60 lb, 1 pet" from the search's pet profile, or ''."""
+    kind = str(s.get("pet_kind") or "")
+    if not kind:
+        return ""
+    bits = [kind]
+    if s.get("pet_weight"):
+        bits.append(f"{s['pet_weight']:g} lb")
+    if s.get("pet_count"):
+        bits.append(f"{s['pet_count']} pet{'s' if s['pet_count'] != 1 else ''}")
+    return ", ".join(bits)
+
+
 def _per_person_text(e: dict[str, Any]) -> str:
     """"$1,000 a month each for 2 people" when the search is shared by more than one person, else ''."""
     n = int(e.get("people") or 1)
@@ -280,6 +307,50 @@ def _facts(p: dict[str, Any]) -> str:
     if p.get("available_from"):
         bits.append(f"available {helpers.day_text(p['available_from'])}")
     return ", ".join(b for b in bits if b)
+
+
+def _extra_facts(p: dict[str, Any]) -> list[str]:
+    """Pet limits, fenced yard and the buyer's facts, when filled in. Free text is fenced."""
+    out: list[str] = []
+    pet = []
+    if p.get("pet_weight_limit") is not None:
+        pet.append(f"dogs up to {p['pet_weight_limit']:g} lb")
+    if p.get("pet_count_limit") is not None:
+        pet.append(f"up to {p['pet_count_limit']} pets")
+    if p.get("pet_deposit") is not None:
+        pet.append(f"pet deposit {_money(p['pet_deposit'])}")
+    if p.get("fenced_yard") is not None:
+        pet.append("fenced yard" if p["fenced_yard"] else "no fenced yard")
+    note = ("Breed note: " + _t(p["pet_breed_note"], "pet breed note", 300)) if p.get("pet_breed_note") else ""
+    if pet or note:
+        out.append("Pet details: " + ", ".join(pet) + (". " if pet and note else "") + note)
+    buy = []
+    if p.get("days_on_market") is not None:
+        buy.append(f"{p['days_on_market']} days on the market")
+    if p.get("special_assessment") is not None:
+        who = {"buyer": "the buyer pays it", "seller": "the seller pays it"}.get(str(p.get("special_assessment_payer") or ""), "who pays it is not filled in")
+        buy.append(f"special assessment {_money(p['special_assessment'])} ({who})")
+    if p.get("closing_costs") is not None:
+        buy.append(f"closing costs {_money(p['closing_costs'])}")
+    if p.get("listing_agent"):
+        buy.append("listing agent " + _t(p["listing_agent"], "listing agent", 120))
+    if buy:
+        out.append("Buyer details: " + ", ".join(buy))
+    return out
+
+
+def _cash_lines(e: dict[str, Any]) -> list[str]:
+    """Cash at move-in (rent) or cash to close (buy), and the listing's own estimate note."""
+    cost = e["cost"]
+    out: list[str] = []
+    cash = cost.get("cash_to_close") if cost.get("mode") == "buy" else cost.get("cash_at_move_in")
+    if cash:
+        label = "Cash to close" if cost.get("mode") == "buy" else "Cash needed on move-in day"
+        out.append(f"{label}: {_money(cash['total'])} (" + ", ".join(f"{pt['label']} {_money(pt['amount'])}" for pt in cash["parts"]) + ")"
+                   + ". Not part of the monthly cost.")
+    if cost.get("listing_estimate_note"):
+        out.append("The listing's own estimate: " + _t(cost["listing_estimate_note"], "listing estimate", 300))
+    return out
 
 
 def _cost_text(e: dict[str, Any]) -> str:
@@ -382,6 +453,7 @@ def _card(e: dict[str, Any], other_ways: bool = False) -> list[str]:
     f = _facts(e)
     if f:
         lines.append(f)
+    lines += _extra_facts(e)
     lines += [_cost_text(e), _score_text(e), _deal_text(e)]
     unknown = _unknown_list(e)
     if unknown:
@@ -623,6 +695,7 @@ def build_server(store: Store) -> FastMCP:
                          f"{_t(s['area'], 'search area', 80) or 'no area'}, budget {_money(s.get('budget_max'))}"
                          + (f", {'move-in' if s['mode'] == 'rent' else 'close'} {helpers.day_text(when)}" if when else "")
                          + (f", {int(s.get('people') or 1)} people sharing the cost" if int(s.get("people") or 1) > 1 else "")
+                         + (f", pets: {_pet_profile(s)}" if _pet_profile(s) else "")
                          + f", {n} place{'s' if n != 1 else ''}")
         if cur:
             counts = store.counts_by_stage(cur["id"])
@@ -704,6 +777,17 @@ def build_server(store: Store) -> FastMCP:
                                                 for l in e["cost"]["lines"] if l["amount"] or l["amount"] is None))
         lines.append("Score by criterion: " + "; ".join(f"{_lab(i['label'], i['kind'])} {round(i['score'] * 100)}%" + ("" if i["known"] else " (unknown)")
                                                         for i in e["score"]["items"]))
+        lines += _cash_lines(e)
+        if e["cost"].get("mode") != "buy":
+            dl = store.application_deadline(e["id"])
+            if dl:
+                lines.append(f"Application deadline: {helpers.day_text(dl['date'])}" + (f" ({_t(dl['note'], 'date note', 80)})" if dl.get("note") else ""))
+            items = store.place_checklist(e["id"])
+            if items:
+                done = sum(1 for i in items if i["done_here"])
+                left = [i for i in items if not i["done_here"]]
+                lines.append(f"Application checklist: {done} of {len(items)} done"
+                             + (". Still to do: " + ", ".join(_t(i["label"], "checklist item", 40) for i in left[:6]) if left else ""))
         tours = store.list_tours(e["id"])
         for t in tours:
             lines.append(f"Tour {t['id']} [{t['status']}]: {helpers.local_time(t['starts_at'])}, {t['duration_minutes']} min"
@@ -1109,7 +1193,7 @@ def build_server(store: Store) -> FastMCP:
     # ------------------------------------------------------------ searches
     TARGET_KEYS = ("max", "min", "minutes", "anchor", "anchor_id", "mode", "want", "year")
     KIND_TARGET = {"price": ("max",), "beds": ("min",), "baths": ("min",), "sqft": ("min",), "commute": ("anchor", "anchor_id", "mode", "minutes"),
-                   "laundry": ("want",), "parking": ("want",), "pets": ("want",), "newer": ("year",), "dishwasher": (), "custom": ()}
+                   "laundry": ("want",), "parking": ("want",), "pets": ("want",), "newer": ("year",), "dishwasher": (), "fenced_yard": (), "custom": ()}
     TARGET_EXAMPLE = {"max": "1600", "min": "1", "minutes": "15", "anchor": '"Campus"', "anchor_id": "1", "mode": '"bike"',
                       "want": '"in_unit"', "year": "2015"}
     CRIT_EXAMPLE = ('[{"kind": "price", "label": "Rent at most $1600", "weight": 80, "dealbreaker": true, "target": {"max": 1600}}, '
@@ -1117,7 +1201,7 @@ def build_server(store: Store) -> FastMCP:
     WEIGHT_NOTE = ("weight is optional (10 when left out) and is a number from 0 to 100. "
                    "A criterion looks like " + CRIT_EXAMPLE)
     CRIT_DOC = ("criteria: list of {kind, label?, weight? (0-100, optional), dealbreaker?, target}. Kinds and targets: price {max}, beds/baths {min}, sqft {min}, "
-                "commute {anchor: name or id, mode, minutes}, laundry {want: in_unit|in_building}, dishwasher, parking {want?}, pets {want?}, "
+                "commute {anchor: name or id, mode, minutes}, laundry {want: in_unit|in_building}, dishwasher, parking {want?}, pets {want?}, fenced_yard (no target; it reads the place's fenced_yard), "
                 "newer {year}, custom (the user scores it by hand). target is an OBJECT with only that kind's keys, not extra keys on the criterion. "
                 "label may also be passed as name, and kind as field. Price is checked against true monthly cost, so include utilities and fees. Example: " + CRIT_EXAMPLE)
 
@@ -1264,11 +1348,15 @@ def build_server(store: Store) -> FastMCP:
                       budget_max: Annotated[float | None, Field(description="Most per month in true monthly cost (rent) or most to pay (buy)")] = None,
                       people: Annotated[int | None, Field(description=f"How many people share the cost (1 to {MAX_PEOPLE}, default 1). With more than one, places show a per-person monthly cost")] = None,
                       notes: Annotated[str | None, Field(description="What the user told you about this hunt")] = None,
+                      pet_kind: Annotated[str | None, Field(description="The user's pets: cat, dog, both, or none. Places are checked against them")] = None,
+                      pet_weight: Annotated[float | None, Field(description="The dog's weight in pounds")] = None,
+                      pet_count: Annotated[int | None, Field(description="How many pets (1 to 20)")] = None,
                       criteria: Annotated[list[dict[str, Any]] | None, Field(description="Weighted criteria. " + CRIT_DOC)] = None,
                       anchors: Annotated[list[dict[str, Any]] | None, Field(description="Places to measure commutes to: [{name, address, lat, lng}]. Reuses one with the same name")] = None) -> CallToolResult:
         """Start a new search with optional criteria and anchors. All or nothing: if anything in it is wrong, nothing is saved and the reply says what to fix. The first search becomes the current one; otherwise the user picks it in the app."""
         fields = {k: v for k, v in (("area", area), ("move_in", move_in), ("target_close", target_close), ("budget_max", budget_max),
-                                    ("people", people), ("notes", notes)) if v is not None}
+                                    ("people", people), ("notes", notes), ("pet_kind", pet_kind),
+                                    ("pet_weight", pet_weight), ("pet_count", pet_count)) if v is not None}
         problems: list[str] = []
         try:
             store._search_values({**fields, "name": name, "mode": mode}, partial=False)  # noqa: SLF001
@@ -1284,6 +1372,8 @@ def build_server(store: Store) -> FastMCP:
         lines = [f"Created search {s['id']} {_sname(s)} ({_mode_word(s['mode'])})" + ("." if cur and cur["id"] == s["id"] else ". It is not the current search; the user can switch on the Search page. Pass search_id to add_place to use it.")]
         if int(s.get("people") or 1) > 1:
             lines.append(f"Shared by {s['people']} people, so places show a per-person monthly cost.")
+        if _pet_profile(s):
+            lines.append(f"The user's pets: {_pet_profile(s)}. Places are checked against them.")
         if a_lines:
             lines.append("Anchors: " + "; ".join(a_lines))
         if c_lines:
@@ -1301,17 +1391,21 @@ def build_server(store: Store) -> FastMCP:
                       target_close: Annotated[str | None, Field(description="YYYY-MM-DD")] = None,
                       budget_max: Annotated[float | None, Field(description="")] = None,
                       people: Annotated[int | None, Field(description=f"How many people share the cost (1 to {MAX_PEOPLE}). With more than one, places show a per-person monthly cost")] = None,
+                      pet_kind: Annotated[str | None, Field(description="The user's pets: cat, dog, both, or none. Places are checked against them")] = None,
+                      pet_weight: Annotated[float | None, Field(description="The dog's weight in pounds")] = None,
+                      pet_count: Annotated[int | None, Field(description="How many pets (1 to 20)")] = None,
                       add_criteria_list: Annotated[list[dict[str, Any]] | None, Field(description="New criteria to add, each {kind, label, weight, dealbreaker, target}, where target is an object such as {\"max\": 1600}. " + CRIT_DOC)] = None,
                       reweight: Annotated[list[dict[str, Any]] | None, Field(description="Change existing criteria: [{id, weight?, dealbreaker?, target?, label?}]. Criteria can't be removed")] = None,
                       add_anchors_list: Annotated[list[dict[str, Any]] | None, Field(description="Anchors to add or fill in: [{name, address, lat, lng}]")] = None) -> CallToolResult:
-        """Change a search: its name, area, dates, budget, people sharing the cost, criteria (add or reweight, never remove) and anchors. A criterion can't be removed; the user does that in the app. All or nothing: if anything is wrong, nothing is changed and the reply says what to fix.
+        """Change a search: its name, area, dates, budget, people sharing the cost, the user's pets (pet_kind, pet_weight, pet_count), criteria (add or reweight, never remove) and anchors. A criterion can't be removed; the user does that in the app. All or nothing: if anything is wrong, nothing is changed and the reply says what to fix.
         To add criteria pass add_criteria_list as a list of objects: {"kind": "price", "label": "Rent at most $1600", "weight": 80, "dealbreaker": true, "target": {"max": 1600}}.
-        target is an object with the kind's keys (price {max}; beds, baths, sqft {min}; commute {anchor, mode, minutes}; laundry {want}; newer {year}). "name" works as an alias for "label"."""
+        target is an object with the kind's keys (price {max}; beds, baths, sqft {min}; commute {anchor, mode, minutes}; laundry {want}; newer {year}; fenced_yard takes no target). "name" works as an alias for "label".
+        pet_kind (cat, dog, both or none), pet_weight (pounds) and pet_count describe the user's pets; the pets and fenced_yard criteria read them."""
         s = _search_for(store, search_id)
         fields = {k: v for k, v in (("name", name), ("area", area), ("move_in", move_in), ("target_close", target_close), ("budget_max", budget_max),
-                                    ("people", people)) if v is not None}
+                                    ("people", people), ("pet_kind", pet_kind), ("pet_weight", pet_weight), ("pet_count", pet_count)) if v is not None}
         if not (fields or add_anchors_list or add_criteria_list or reweight):
-            raise ValueError("Nothing to change. Pass name, area, move_in, target_close, budget_max, people, add_criteria_list, reweight or add_anchors_list.")
+            raise ValueError("Nothing to change. Pass name, area, move_in, target_close, budget_max, people, pet_kind, pet_weight, pet_count, add_criteria_list, reweight or add_anchors_list.")
         problems: list[str] = []
         try:
             store._search_values(fields, partial=True)  # noqa: SLF001

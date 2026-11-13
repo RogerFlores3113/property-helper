@@ -18,15 +18,21 @@
   {{ select("Laundry", "laundry", [("in_unit", "In the unit"), ("in_building", "In the building"), ("hookups", "Hookups only (bring your own)"), ("none", "None")], v.get('laundry', ''), blank="Not sure") }}
   {{ select("Dishwasher", "dishwasher", [("1", "Yes"), ("0", "No")], v.get('dishwasher', '')|string if v.get('dishwasher', '') is not none else '', blank="Not sure") }}
   {{ select("Parking", "parking", [("garage", "Garage"), ("covered", "Covered"), ("lot", "Lot"), ("street", "Street"), ("none", "None")], v.get('parking', ''), blank="Not sure") }}
+  {% if not buy %}
   {{ field("Parking cost per month", "parking_cost", v.get('parking_cost', ''), kind="number", step="any") }}
+  {% endif %}
   {{ select("Pets", "pets", [("both", "Cats and dogs"), ("cats", "Cats only"), ("dogs", "Dogs only"), ("none", "No pets")], v.get('pets', ''), blank="Not sure") }}
   {% if not buy %}
   {{ field("Pet rent per month", "pet_rent", v.get('pet_rent', ''), kind="number", step="any") }}
   {% endif %}
+  {% if not buy %}
   {{ field("One-time pet fee", "pet_fee", v.get('pet_fee', ''), kind="number", step="any") }}
+  {% endif %}
   {{ field("Heaviest dog allowed (lb)", "pet_weight_limit", v.get('pet_weight_limit', ''), kind="number", step="any", hint="For example 50 when dogs must be under 50 lb.") }}
   {{ field("Most pets allowed", "pet_count_limit", v.get('pet_count_limit', ''), kind="number", step="1") }}
+  {% if not buy %}
   {{ field("Refundable pet deposit", "pet_deposit", v.get('pet_deposit', ''), kind="number", step="any", hint="Comes back when you move out, so it is counted in the cash you need at move-in, not in the monthly cost.") }}
+  {% endif %}
   {{ field("Breed rules", "pet_breed_note", v.get('pet_breed_note', ''), hint="For example: no aggressive breeds.") }}
   {{ select("Fenced yard", "fenced_yard", [("1", "Yes"), ("0", "No")], v.get('fenced_yard', '')|string if v.get('fenced_yard', '') is not none else '', blank="Not sure") }}
   {% if not buy %}
@@ -52,9 +58,15 @@
   {% if not buy %}
   {{ field("Application fee", "application_fee", v.get('application_fee', ''), kind="number", step="any") }}
   {% endif %}
+  {% if not buy %}
   {{ field("Other monthly fees", "other_monthly_fees", v.get('other_monthly_fees', ''), kind="number", step="any") }}
+  {% endif %}
+  {% if not buy %}
   {{ field("Move-in fees", "move_in_fees", v.get('move_in_fees', ''), kind="number", step="any") }}
+  {% endif %}
+  {% if not buy %}
   {{ field("Broker fee", "broker_fee", v.get('broker_fee', ''), kind="number", step="any") }}
+  {% endif %}
   {% if buy %}
   {{ field("HOA per month", "hoa", v.get('hoa', ''), kind="number", step="any") }}
   {% endif %}
