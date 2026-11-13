@@ -4,7 +4,7 @@
 {% block body %}
 <link rel="stylesheet" href="/static/data.css">
 <div class="data-page">
-{% call page_head("Privacy", "Everything stays on this computer. Here is exactly what that means.") %}{% endcall %}
+{% call page_head("Privacy", "Your data stays on this computer. The map loads street tiles from OpenStreetMap. Here is exactly what leaves, and when.") %}{% endcall %}
 
 <section class="card">
   <h2>What is stored, and where</h2>
@@ -13,7 +13,7 @@
     <li>The data folder is: <span class="path">{{ data_folder }}</span></li>
     <li>The folder is private to your computer account where your system supports that (Mac and Linux). The database file is <code>prophelper.db</code>; documents you add to a place are in <code>files</code>; the other items are the app's own (<code>backups</code>, <code>ai.key</code> if you added a key, and a few small working files).</li>
     <li>Automatic backups are in the same folder, in <code>backups</code>. The app makes one before a restore, before removing the sample data and before a delete. Each is a full copy of your data, notes included, and the newest 10 of each kind are kept.</li>
-    <li>Downloads (a backup copy, the documents zip, CSV, JSON and calendar files) go only to your browser's downloads folder, and only a page you opened from the app can ask for them. Backups never include your AI key.</li>
+    <li>Downloads (a backup copy, the documents zip, spreadsheet (CSV) files, JSON and calendar files) go only to your browser's downloads folder, and only a page you opened from the app can ask for them. Backups never include your AI key.</li>
     <li>There are no accounts and no cloud copy. If you delete the folder, your data is gone, so download a backup now and then.</li>
     <li>This window only answers requests from this computer, and only from a browser opened by the app icon (or <code>prophelper open</code>). That browser gets a random code in a cookie that works for 12 hours after you last used it; restarting the app ends it.</li>
   </ul>
@@ -21,10 +21,10 @@
 
 <section class="card" id="network">
   <h2>What leaves this computer</h2>
-  <p>Only three things can use the network, and each is yours to control:</p>
+  <p>Only these five things can use the network. The first is on by default; the rest happen only when you turn them on or click them:</p>
   <ol class="privacy-list">
-    <li><strong>Map tiles</strong> (the pictures of the map). When you open the Map page, your browser loads them from OpenStreetMap (<code>tile.openstreetmap.org</code>). They are loaded by your browser, so OpenStreetMap sees the area you look at and your network address. Now: <strong>{{ 'on' if map_tiles else 'off' }}</strong>. <a href="/settings#map">Change it in Settings</a>; with tiles off the map shows places on a plain background.</li>
-    <li><strong>Address lookup</strong> ("Find map locations for addresses"). Off unless you turn it on. It uses OpenStreetMap Nominatim, and only runs when you press a Find button on a place or an anchor. Now: <strong>{{ 'on' if geocode else 'off' }}</strong>. One lookup sends this to <code>nominatim.openstreetmap.org</code>:
+    <li><strong>Map tiles</strong> (the street pictures of the map). <strong>On by default.</strong> When you open the Map page, your browser loads them from OpenStreetMap (<code>tile.openstreetmap.org</code>). They are loaded by your browser, so OpenStreetMap sees the area you look at and your network address. Now: <strong>{{ 'on' if map_tiles else 'off' }}</strong>. <a href="/settings#map">Change it in Settings</a>; with tiles off the map shows places on a plain background and nothing is loaded from OpenStreetMap.</li>
+    <li><strong>Address lookup</strong> ("Find map locations for addresses"). Off unless you turn it on. It uses OpenStreetMap's free address lookup (<code>nominatim.openstreetmap.org</code>), and only runs when you press a Find on map button on a place or an important place. If it is off, pressing the button asks you first. Now: <strong>{{ 'on' if geocode else 'off' }}</strong>. One lookup sends this:
       <ul>
         <li>the street address, city, state and ZIP of that one place, as the search words (not its name, unit, notes, listing text or rating);</li>
         <li>the request options <code>format=json</code> and <code>limit=1</code>;</li>
@@ -35,17 +35,19 @@
     <li><strong>AI calls to Anthropic</strong>. Only when you saved your own Anthropic key and press an AI button (or the Test key button). {% if key['set'] %}A key is saved ({{ key.hint }}).{% else %}No key is set, so nothing is sent: each AI button just gives you a prompt to copy.{% endif %} The request goes straight from this computer to <code>api.anthropic.com</code> using the model <code>{{ ai_model }}</code>. Pressing a place's AI button sends:
       <ul>
         <li>the place's saved facts, your notes on it and its timeline;</li>
-        <li>your search's criteria;</li>
+        <li>what matters to you in your search;</li>
         <li>the names and roles of people you saved for that place (their email addresses and phone numbers are taken out first);</li>
         <li>the listing text you pasted for that place;</li>
         <li>for a message draft, the purpose you chose (availability, questions, tour or follow-up);</li>
         <li>and your key, as the sign-in for that request.</li>
       </ul>
       It never sends your other places, your documents, or your data folder. The "Show what will be sent" box on the place page shows the exact text before you press. The Test key button sends only the word OK. The app never sends a message to anyone for you: drafts are for you to copy.</li>
+    <li><strong>The "Open in Claude" link</strong> on a place's AI help. Only when you click it. It opens <code>claude.ai</code> in a new browser tab with the prompt text (this place's details, your notes and the listing) written in the web address, so that text goes to Claude on the web, under your own Claude account. Nothing is sent before you click. The Copy button sends nothing.</li>
+    <li><strong>Listing photos</strong>. Off by default (Settings, "Show listing photos"). Now: <strong>{{ 'on' if show_photos else 'off' }}</strong>. When on, your browser loads each photo from whatever website the listing's photo link points to. A listing that was pasted or added by an AI app can point to any site it likes, so that site would see your network address. Keep it off unless you trust the listings you save.</li>
   </ol>
   <ul class="privacy-list">
     <li>No telemetry, no analytics, no update checks, no advertising.</li>
-    <li>The app itself never opens a listing link or a listing website. When you paste a link, only its shape is read on your computer. Photos from a listing load from the listing's website only if you turn on "Show photos" in Settings. Now: <strong>{{ 'on' if show_photos else 'off' }}</strong>.</li>
+    <li>The app itself never opens a listing link or a listing website. When you paste a link, only its shape is read on your computer. Photos from a listing load from the listing's website only if you turn on "Show listing photos" in Settings (see the list above).</li>
     <li>Your AI app (Claude or Codex) may read, search or scrape listing pages with its own tools and pass what it found to Property Helper. Some sites forbid automated scraping in their terms of service, so check a site's terms first. Reading a page you could open yourself is usually fine. Settings has a "Stricter scraping guards" switch that tells the AI not to scrape and limits how many places it can add.</li>
     <li>An AI app you connected can read and add places, and update them, but it cannot delete anything, and it never changes your own notes.</li>
   </ul>

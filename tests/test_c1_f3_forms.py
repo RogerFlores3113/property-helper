@@ -156,3 +156,41 @@ def test_create_search_keeps_move_in_and_target_close(store):
 def test_update_search_keeps_dates(store, setup):
     local_client(store).post(f"/search/{setup['id']}", data={"name": "UIUC", "mode": "rent", "move_in": "2027-08-01"})
     assert store.get_search(setup["id"])["move_in"] == "2027-08-01"
+
+
+# ---------------------------------------------------------------- privacy copy, nav, plain words
+def test_footer_and_privacy_say_the_map_loads_openstreetmap_tiles(client):
+    for path in ("/today", "/privacy"):
+        html = client.get(path).text
+        assert "street tiles from OpenStreetMap" in html
+    assert "can turn that off in Settings" in client.get("/today").text
+
+
+def test_privacy_covers_open_in_claude_and_photos_warning(client):
+    html = client.get("/privacy").text
+    assert "Open in Claude" in html and "claude.ai" in html and "whatever website" in html
+
+
+def test_settings_warns_next_to_the_photos_setting(client):
+    html = client.get("/settings").text
+    assert "could point to any site" in html
+
+
+def test_nav_keeps_six_links_and_groups_the_rest_under_more(client):
+    html = client.get("/today").text
+    top = html.split('aria-label="Main"')[1].split("</nav>")[0]
+    for label in ("Today", "Board", "Map", "Calendar", "Compare"):
+        assert f">{label}</a>" in top
+    assert "Settings" not in top and "Privacy" not in top and "Connect" not in top
+    more = html.split('class="more"')[1].split("</details>")[0]
+    for label in ("Settings", "Privacy", "Connect an AI app", "Contacts", "Checklist", "Search"):
+        assert label in more
+    assert 'href="/add"' in html
+
+
+def test_search_page_uses_plain_words(store, setup):
+    import re
+    html = re.sub(r"<[^>]+>", " ", local_client(store).get(f"/search?id={setup['id']}").text).lower()  # visible words only
+    for word in ("deal-breaker", "criterion", "criteria", "nominatim", "anchor", " weight"):
+        assert word not in html, word
+    assert "must have" in html and "how much it matters" in html and "important places" in html

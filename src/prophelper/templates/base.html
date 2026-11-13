@@ -6,6 +6,7 @@
   <meta name="color-scheme" content="light dark">
   <title>{% block title %}Property Helper{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
+  <link rel="stylesheet" href="/static/nav.css">
   <script src="/static/htmx.min.js" defer></script>
   <script src="/static/app.js" defer></script>
 </head>
@@ -15,13 +16,18 @@
   <header class="top">
     <a class="brand" href="/today">Property Helper</a>
     <nav aria-label="Main">
-      {% for href, label in [('/today', 'Today'), ('/board', 'Board'), ('/map', 'Map'), ('/calendar', 'Calendar'), ('/compare', 'Compare'), ('/contacts', 'Contacts'), ('/checklist', 'Checklist'), ('/search', 'Search')] %}
+      {% for href, label in [('/today', 'Today'), ('/board', 'Board'), ('/map', 'Map'), ('/calendar', 'Calendar'), ('/compare', 'Compare')] %}
       <a href="{{ href }}" class="{{ 'on' if path == href or (href != '/today' and path.startswith(href ~ '/')) }}"{% if path == href %} aria-current="page"{% endif %}>{{ label }}</a>
       {% endfor %}
     </nav>
+    {% set more = [('/contacts', 'Contacts'), ('/checklist', 'Checklist'), ('/search', 'Search'), ('/settings', 'Settings'), ('/privacy', 'Privacy'), ('/connect', 'Connect an AI app'), ('/backups', 'Back up my data')] %}
     <nav class="right" aria-label="More">
-      <a href="/settings" class="{{ 'on' if path == '/settings' }}">Settings</a>
-      <a href="/connect" class="wide-only {{ 'on' if path == '/connect' }}">Connect an AI app</a>
+      <details class="more">
+        <summary class="{{ 'on' if more | selectattr(0, 'equalto', path) | list }}">More</summary>
+        <div class="more-menu">
+          {% for href, label in more %}<a href="{{ href }}" class="{{ 'on' if path == href or path.startswith(href ~ '/') }}"{% if path == href %} aria-current="page"{% endif %}>{{ label }}</a>{% endfor %}
+        </div>
+      </details>
       <a class="btn primary small" href="/add">Add</a>
     </nav>
   </header>
@@ -32,8 +38,8 @@
     {% block body %}{% endblock %}
   </main>
   <footer class="foot">
-    Property Helper runs on this computer and sends nothing anywhere unless you turn on the map or use AI. It has no accounts and no tracking.
-    <a href="/privacy">Privacy</a> &middot; <a href="/backups">Back up my data</a> &middot; <a href="/connect">Connect an AI app</a> &middot; v{{ version }}
+    Your data stays on this computer. The map loads street tiles from OpenStreetMap; you can turn that off in Settings. Nothing else is sent unless you turn on address lookup, photos or AI help, or click Open in Claude. No accounts, no tracking.
+    <a href="/privacy">Privacy</a> &middot; <a href="/settings">Settings</a> &middot; <a href="/backups">Back up my data</a> &middot; <a href="/connect">Connect an AI app</a> &middot; v{{ version }}
   </footer>
   {% block scripts %}{% endblock %}
 </body>
