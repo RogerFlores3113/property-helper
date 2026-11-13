@@ -10,7 +10,7 @@ from __future__ import annotations
 from datetime import date, datetime, timedelta
 from typing import Any
 
-from . import enrich, helpers, redflags
+from . import enrich, helpers, redflags, stages
 from .store import PLACE_DATE_LABELS, Store
 
 COMING_UP_DAYS = 14
@@ -40,8 +40,50 @@ def fits(place: dict[str, Any], high_messages: Any = None) -> bool:
 def best_fits(rows: list[dict[str, Any]], limit: int = TOP_FITS) -> list[dict[str, Any]]:
     """The top places by score that fit. ``rows`` are enriched places. Passed, won and hidden places are skipped."""
     open_rows = [p for p in rows if not p["hidden"] and p["stage"] not in ("Passed", "Lease signed", "Closed") and fits(p)]
-    open_rows.sort(key=lambda p: (-p["score_total"], p["title"].lower()))
+    open_rows.sort(key=lambda p: ((p.get("score") or {}).get("sort_group", 0), -p["score_total"], p["title"].lower()))
     return open_rows[:limit]
+
+
+NEAR_MISS_PCT = 0.03  # over the budget by less than this share counts as a near miss
+
+
+def _near_miss_reason(place: dict[str, Any], over: float) -> str:
+    """'because pet rent counts' for the first cost line that, left out, would bring the place under the budget."""
+    names = {"pet_rent": "pet rent", "utilities": "the utilities estimate", "parking": "parking", "other": "the other monthly fees",
+             "one_time": "the one-time fees"}
+    for line in (place.get("cost") or {}).get("lines") or []:
+        if line["key"] in names and (line["amount"] or 0) >= over - 1e-9 and (line["amount"] or 0) > 0:
+            return f" because {names[line['key']]} count{'s' if line['key'] in ('pet_rent', 'parking') else ''}"
+    return ""
+
+
+def near_miss_text(place: dict[str, Any]) -> str:
+    """'$5 over because pet rent counts' when the place misses the budget by under 3 percent and fails nothing else
+    (no other deal-breaker, no scam sign), else ''. Only the monthly cost or price criterion can be the miss."""
+    score = place.get("score") or {}
+    if place.get("score_total") is None or possible_scam(place):
+        return ""
+    failed = [i for i in score.get("items") or [] if i.get("dealbreaker_status") == "fail"]
+    if not failed or any(i["kind"] != "price" for i in failed):
+        return ""
+    item = failed[0]
+    over, pct = item.get("over_amount"), item.get("over_pct")
+    if over is None or pct is None or pct >= NEAR_MISS_PCT or over <= 0:
+        return ""
+    return f"${over:,.0f} over" + _near_miss_reason(place, over)
+
+
+def near_misses(rows: list[dict[str, Any]], limit: int = TOP_FITS) -> list[dict[str, Any]]:
+    """Open places that fail only on cost, by under 3 percent: [{"place", "text"}], best score first."""
+    out = []
+    for p in rows:
+        if p["hidden"] or p["stage"] in ("Passed", "Lease signed", "Closed"):
+            continue
+        text = near_miss_text(p)
+        if text:
+            out.append({"place": p, "text": text})
+    out.sort(key=lambda r: (-((r["place"].get("score") or {}).get("raw_total") or 0), r["place"]["title"].lower()))
+    return out[:limit]
 
 
 def month_day(value: str | date) -> str:
@@ -132,6 +174,14 @@ def prep_line(tour: dict[str, Any]) -> str:
     return f"Before you go: check {text}. The checklist is on the place page."
 
 
+def checklist_applies(stage: str, mode: str) -> bool:
+    """The application checklist only helps before you apply: renters at stages before Applied, buyers before an offer
+    (buyers have no application checklist, so this is False for them today)."""
+    order = stages.stages_for(mode)
+    first_done = "Offer drafted" if mode == "buy" else "Applied"
+    return stage in order and first_done in order and order.index(stage) < order.index(first_done)
+
+
 def coming_up(store: Store, search: dict[str, Any], rows: list[dict[str, Any]], days: int = COMING_UP_DAYS) -> list[dict[str, Any]]:
     """Tours and key dates in the next ``days`` days, soonest first. Each: ``when`` (sort key), ``kind``, ``label``,
     ``title``, ``href``, ``date`` (YYYY-MM-DD), ``time`` (text), ``note`` and ``prep``."""
@@ -147,13 +197,21 @@ def coming_up(store: Store, search: dict[str, Any], rows: list[dict[str, Any]], 
                     "note": ("with " + t["with_whom"]) if t["with_whom"] else "", "prep": prep_line(t),
                     "warn": close.get(t["id"], "")})
     total_items = len(store.list_checklist()) if search["mode"] != "buy" else 0
+    by_id = {p["id"]: p["stage"] for p in rows}
     for r in store.upcoming_place_dates(days, search_id=sid):
         row = {"when": (r["date"], r["time"] or "00:00"), "kind": "key_date", "label": PLACE_DATE_LABELS.get(r["kind"], "Date"),
                "title": r["title"], "href": f"/places/{r['place_id']}#applying" if r["kind"] == "application_deadline" else f"/places/{r['place_id']}#dates",
                "date": r["date"], "time": _clock(r["time"]), "note": r["note"], "prep": ""}
         if r["kind"] == "application_deadline" and search["mode"] != "buy":
             row["text"] = apply_by_text(r["date"])
-            row["prep"] = items_left_text(store.place_checklist_left(r["place_id"]), total_items)
+            stage = by_id.get(r["place_id"])
+            if stage is None:
+                try:
+                    stage = store.get_place(r["place_id"])["stage"]
+                except Exception:  # a place that is gone has no stage to gate on
+                    stage = ""
+            if checklist_applies(stage, search["mode"]):
+                row["prep"] = items_left_text(store.place_checklist_left(r["place_id"]), total_items)
         out.append(row)
     for r in store.upcoming_dates(days, search_id=sid):
         out.append({"when": (r["date"], "00:00"), "kind": "place_date", "label": r["label"], "title": r["place"]["title"],
@@ -217,5 +275,5 @@ def late_availability(rows: list[dict[str, Any]], search: dict[str, Any], limit:
 def build(store: Store, search: dict[str, Any]) -> dict[str, Any]:
     """Everything the Today template needs for one search."""
     rows = enrich.enrich_places(store, search)
-    return {"fits": best_fits(rows), "coming": coming_up(store, search, rows), "waiting": waiting_rows(store, search),
+    return {"fits": best_fits(rows), "near_miss": near_misses(rows), "coming": coming_up(store, search, rows), "waiting": waiting_rows(store, search),
             "new": new_places(store, search), "late": late_availability(rows, search)}

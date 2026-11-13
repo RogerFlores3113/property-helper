@@ -11,7 +11,8 @@
 * ``fit``: ``"fits"``, ``"doesnt_fit"`` (a deal-breaker fails; ``fit_reasons`` says each gap, such as "Over budget by
   $6") or ``"check_first"`` (a serious red flag, ``fit_reasons`` says why). The total is capped (49 when a
   deal-breaker fails, 50 for a serious red flag) so a place that fails never looks like a great match, and
-  ``raw_total`` keeps the uncapped number. ``sort_group`` is 0 for ``fits`` and 1 otherwise: sort on it first.
+  ``raw_total`` keeps the uncapped number. ``sort_group`` is 0 for ``fits``, 1 for ``doesnt_fit`` and 2 for a
+  possible scam (``check_first``, even when it also fails a deal-breaker): sort on it first.
 * ``unknown_count``: how many criteria rest on an unknown value (each scored at 0.5).
 """
 from __future__ import annotations
@@ -98,6 +99,26 @@ def _unknown(target: str, what: str) -> dict[str, Any]:
     return _result(None, "", target, f"{what} is not filled in, so it counts as a maybe.", known=False, passes=None)
 
 
+NEAR_OVER = 0.05  # this far over the target scores NEAR_SCORE; the curve then falls to 0 at 25% over
+NEAR_SCORE = 0.6
+
+
+def over_score(over_ratio: float) -> float:
+    """Score for being ``over_ratio`` (0.05 is 5 percent) above a cost target: steep at first (5 percent over scores
+    0.6), then straight down to 0 at 25 percent over."""
+    if over_ratio <= 0:
+        return 1.0
+    if over_ratio <= NEAR_OVER:
+        return 1 - (1 - NEAR_SCORE) * over_ratio / NEAR_OVER
+    return max(0.0, NEAR_SCORE * (1 - (over_ratio - NEAR_OVER) / (0.25 - NEAR_OVER)))
+
+
+def _buyer_assessment(place: dict[str, Any]) -> float:
+    """A special assessment the buyer pays (0 otherwise). It is in the cash to close, and the price score only says so."""
+    sa = _num(place.get("special_assessment"))
+    return sa if sa and str(place.get("special_assessment_payer") or "") == "buyer" else 0.0
+
+
 def _score_price(c: dict[str, Any], place: dict[str, Any], ctx: dict[str, Any]) -> dict[str, Any]:
     """Rent compares the true monthly cost to the cap. Buy compares the listed PRICE to the cap (not the monthly cost)."""
     t = c["target"]
@@ -116,11 +137,20 @@ def _score_price(c: dict[str, Any], place: dict[str, Any], ctx: dict[str, Any]) 
     value = f"{_fmt(have, '$')}{unit}"
     if not limit:
         return _result(1.0, value, target, "No price limit set on this search.", known=True, passes=True)
+    if buying and _buyer_assessment(place) and have <= limit:
+        return _result(1.0, value, target, f"{_fmt(limit - have, '$')} under your limit. A special assessment of "
+                       f"{_fmt(_buyer_assessment(place), '$')} that you pay is not in this score; it is in the cash to close.",
+                       known=True, passes=True)
     if have <= limit:
         return _result(1.0, value, target, f"{_fmt(limit - have, '$')} under your limit.", known=True, passes=True)
-    score = 1 - (have - limit) / (0.25 * limit)
-    return _result(score, value, target, f"{_fmt(have - limit, '$')} over your limit.", known=True, passes=False,
-                   gap=f"Over budget by {_fmt(have - limit, '$')}")
+    score = over_score((have - limit) / limit)
+    detail = f"{_fmt(have - limit, '$')} over your limit."
+    if buying and _buyer_assessment(place):
+        detail += (f" A special assessment of {_fmt(_buyer_assessment(place), '$')} that you pay is not in this score; "
+                   "it is in the cash to close.")
+    r = _result(score, value, target, detail, known=True, passes=False, gap=f"Over budget by {_fmt(have - limit, '$')}")
+    r["over_amount"], r["over_pct"] = have - limit, (have - limit) / limit
+    return r
 
 
 def _score_min(c: dict[str, Any], place: dict[str, Any], field: str, label: str, unit: str) -> dict[str, Any]:
@@ -351,7 +381,7 @@ def score_place(place: dict[str, Any], criteria: Iterable[dict[str, Any]], *, mo
     unknown = [i["label"] for i in items if not i["known"]]
     return {"total": total, "raw_total": raw, "items": items, "unknown": unknown, "unknown_count": len(unknown),
             "failed": failed, "check": check, "fails_dealbreaker": bool(failed), "needs_check": bool(check),
-            "fit": fit, "fit_reasons": reasons, "scam": scam, "sort_group": 0 if fit == "fits" else 1,
+            "fit": fit, "fit_reasons": reasons, "scam": scam, "sort_group": {"fits": 0, "doesnt_fit": 1}.get(fit, 2),
             "cost": ctx["cost"]}
 
 

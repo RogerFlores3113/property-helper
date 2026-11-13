@@ -955,8 +955,8 @@ class Store:
             out["people"] = int(n)
         if "pet_kind" in fields:
             kind = _text(fields["pet_kind"], 10).lower()
-            if kind not in ("", "cat", "dog", "both"):
-                raise ValueError("Your pets are cat, dog, both, or none.")
+            if kind not in ("", "cat", "dog", "both", "none"):
+                raise ValueError("Your pets are cat, dog, both or none.")
             out["pet_kind"] = kind
         if "pet_weight" in fields:
             n = to_number(fields["pet_weight"], "your dog's weight")
