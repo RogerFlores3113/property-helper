@@ -1,0 +1,58 @@
+{% extends "base.html" %}
+{% from "_macros.html" import page_head %}
+{% block title %}Privacy &middot; Property Helper{% endblock %}
+{% block body %}
+<link rel="stylesheet" href="/static/data.css">
+<div class="data-page">
+{% call page_head("Privacy", "Everything stays on this computer. Here is exactly what that means.") %}{% endcall %}
+
+<section class="card">
+  <h2>What is stored, and where</h2>
+  <ul class="privacy-list">
+    <li>Your searches, places, notes, contacts, tours and AI drafts are in one database file on this computer. It is not encrypted, so keep your computer account protected.</li>
+    <li>The data folder is: <span class="path">{{ data_folder }}</span></li>
+    <li>The folder is private to your computer account where your system supports that (Mac and Linux). The database file is <code>prophelper.db</code>; documents you add to a place are in <code>files</code>; the other items are the app's own (<code>backups</code>, <code>ai.key</code> if you added a key, and a few small working files).</li>
+    <li>Automatic backups are in the same folder, in <code>backups</code>. The app makes one before a restore, before removing the sample data and before a delete. Each is a full copy of your data, notes included, and the newest 10 of each kind are kept.</li>
+    <li>Downloads (a backup copy, the documents zip, CSV, JSON and calendar files) go only to your browser's downloads folder, and only a page you opened from the app can ask for them. Backups never include your AI key.</li>
+    <li>There are no accounts and no cloud copy. If you delete the folder, your data is gone, so download a backup now and then.</li>
+    <li>This window only answers requests from this computer, and only from a browser opened by the app icon (or <code>prophelper open</code>). That browser gets a random code in a cookie that works for 12 hours after you last used it; restarting the app ends it.</li>
+  </ul>
+</section>
+
+<section class="card" id="network">
+  <h2>What leaves this computer</h2>
+  <p>Only three things can use the network, and each is yours to control:</p>
+  <ol class="privacy-list">
+    <li><strong>Map tiles</strong> (the pictures of the map). When you open the Map page, your browser loads them from OpenStreetMap (<code>tile.openstreetmap.org</code>). They are loaded by your browser, so OpenStreetMap sees the area you look at and your network address. Now: <strong>{{ 'on' if map_tiles else 'off' }}</strong>. <a href="/settings#map">Change it in Settings</a>; with tiles off the map shows places on a plain background.</li>
+    <li><strong>Address lookup</strong> ("Find map locations for addresses"). Off unless you turn it on. When on, the street address of a place without a map point is sent to OpenStreetMap Nominatim, at most one request per second, with a generic user agent that names no one. Now: <strong>{{ 'on' if geocode else 'off' }}</strong>.</li>
+    <li><strong>AI calls to Anthropic</strong>. Only when you saved your own Anthropic key and press an AI button. {% if key['set'] %}A key is saved ({{ key.hint }}).{% else %}No key is set, so nothing is sent: each AI button just gives you text to copy.{% endif %} The request goes straight from this computer to <code>api.anthropic.com</code>. It sends the one place you asked about (its facts, your search's criteria and the notes of that place) and nothing else, never your key, your other places or your data folder.</li>
+  </ol>
+  <ul class="privacy-list">
+    <li>No telemetry, no analytics, no update checks, no advertising.</li>
+    <li>The app itself never opens a listing link or a listing website. When you paste a link, only its shape is read on your computer. Photos from a listing load from the listing's website only if you turn on "Show photos" in Settings. Now: <strong>{{ 'on' if show_photos else 'off' }}</strong>.</li>
+    <li>Your AI app (Claude or Codex) may read, search or scrape listing pages with its own tools and pass what it found to Property Helper. Some sites forbid automated scraping in their terms of service, so check a site's terms first. Reading a page you could open yourself is usually fine. Settings has a "Stricter scraping guards" switch that tells the AI not to scrape and limits how many places it can add.</li>
+    <li>An AI app you connected can read and add places, and update them, but it cannot delete anything, and it never changes your own notes.</li>
+  </ul>
+</section>
+
+<section class="card" id="outside">
+  <h2>Files this app writes outside its data folder</h2>
+  <p>Only when you ask, and only what is listed here. Your places never go into these files.</p>
+  <ul class="privacy-list">
+    <li><strong>Connect:</strong> pressing Connect adds one entry called <code>property-helper</code> to the settings file of Claude Desktop, Codex or LM Studio (the Connect page shows the exact file). Everything else in that file is kept as it was, and a copy named <code>.bak</code> is saved next to it first. That copy holds whatever else was in the file at the time, secrets included, so treat it like the original.</li>
+    <li><strong>Skills:</strong> the Skills page, when you press Install, writes one small text file into the folder Claude Code or Codex reads its skills from (the page shows the exact path first). Uninstall removes only the files we wrote.</li>
+    <li>Nothing here is sent anywhere. To undo any of it, delete the entry or the file.</li>
+  </ul>
+</section>
+
+<section class="card" id="ai-updates">
+  <h2>When an AI app updates a place</h2>
+  <p>An AI app you connected can update a place you already saved. Your own notes are never replaced, and an AI app can only move a place forward through the stages, never back. Every time an update replaces something, the old value is written to that place's timeline so you can put it back by hand.</p>
+</section>
+
+<section class="card">
+  <h2>Deleting things</h2>
+  <p>Only you delete, from this window. AI apps connected to Property Helper can add and update, but have no way to delete or restore anything. A backup is taken before each delete, so a mistake can be undone from Settings.</p>
+</section>
+</div>
+{% endblock %}
