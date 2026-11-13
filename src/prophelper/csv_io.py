@@ -53,8 +53,8 @@ _EXTRA_NAMES: dict[str, tuple[str, ...]] = {
     "available_from": ("available", "availability", "move in date", "movein", "available date", "date available"),
     "lease_months": ("lease length", "lease term", "term", "lease months"),
     "deposit": ("security deposit",), "application_fee": ("app fee", "application"),
-    "parking_cost": ("parking fee", "parking rent"), "pet_rent": ("monthly pet rent", "pet fee monthly"),
-    "pet_fee": ("pet deposit", "one time pet fee"), "utilities_estimate": ("estimated utilities", "utility estimate", "utilities cost"),
+    "parking_cost": ("parking fee", "parking rent"), "pet_rent": ("monthly pet rent", "pet fee monthly", "pet rent per month", "pet rent monthly", "pet rent mo", "pet monthly"),
+    "pet_fee": ("pet deposit", "one time pet fee", "pet fee one time", "pet fee onetime", "pet charge", "pet deposit fee"), "utilities_estimate": ("estimated utilities", "utility estimate", "utilities cost"),
     "other_monthly_fees": ("monthly fees", "other fees", "fees per month"),
     "hoa": ("hoa fee", "hoa dues", "hoa monthly"), "property_tax": ("tax", "taxes", "property taxes"),
     "year_built": ("built", "year"), "lat": ("latitude",), "lng": ("lon", "long", "longitude"),
@@ -101,10 +101,24 @@ def _plain(value: Any) -> Any:
     return value
 
 
-def export_csv(places: list[dict[str, Any]]) -> str:
+def _fastest_minutes(place: dict[str, Any], anchor_id: Any) -> Any:
+    times = [c["minutes"] for c in place.get("commutes") or [] if c.get("anchor_id") == anchor_id and c.get("minutes") is not None]
+    return round(min(times)) if times else ""
+
+
+def export_csv(places: list[dict[str, Any]], anchors: list[dict[str, Any]] | None = None, people: Any = 1) -> str:
+    """The places as CSV. Pass places from ``enrich.enrich_places`` (and the anchors) to add the true monthly cost, the cost per
+    person (``people`` people share it), the score and each anchor's fastest commute. Places that are not enriched leave those
+    cells empty. The extra columns are for reading in a spreadsheet and are never matched on import."""
+    try:
+        people = max(1, int(people or 1))
+    except (TypeError, ValueError):
+        people = 1
+    anchors = anchors or []
     out = io.StringIO()
     writer = csv.writer(out, lineterminator="\r\n")
-    writer.writerow([h for h, _ in EXPORT_COLUMNS])
+    writer.writerow([h for h, _ in EXPORT_COLUMNS] + ["True monthly cost", "Cost per person per month", "Score out of 100"]
+                    + [f"Commute to {a.get('name', '')} (minutes, fastest way)" for a in anchors])
     for p in places:
         row = []
         for _, field in EXPORT_COLUMNS:
@@ -112,6 +126,11 @@ def export_csv(places: list[dict[str, Any]]) -> str:
             if field == "dishwasher":
                 v = "" if v is None else ("yes" if v else "no")
             row.append(_safe_cell(_plain(v)))
+        total = p.get("cost_total")
+        row.append(_plain(total))
+        row.append("" if total is None else round(float(total) / people, 2))
+        row.append(_plain(p.get("score_total")))
+        row += [_fastest_minutes(p, a.get("id")) for a in anchors]
         writer.writerow(row)
     return out.getvalue()
 
@@ -217,6 +236,10 @@ def plan_import(store: Store, search_id: int, headers: list[str], rows: list[lis
                 item["warnings"].append(f"Stage \"{raw['stage'][:40]}\" isn't one of this search's stages, so it starts at {st.FIRST_STAGE}.")
             else:
                 item["stage"] = norm
+        bad_price = raw.get("price", "") and raw["price"].lower() not in _UNSET and "price" not in values
+        if bad_price and not (values.get("title") or values.get("address")):
+            item.update(status="skip", reason=f"It has no title or address, and its price (\"{raw['price'][:30]}\") isn't a number.")
+            continue
         if not (values.get("title") or values.get("address") or values.get("url")):
             item.update(status="skip", reason="It has no title, address or link, and a place needs at least one.")
             continue
