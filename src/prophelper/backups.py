@@ -129,7 +129,8 @@ UPLOAD_MAX_BYTES = 200 * 1024 * 1024
 
 
 SETTINGS_ALLOWED = {"current_search_id", "ai_model", "follow_up_days", "map_tiles", "geocode", "show_photos", "theme",
-                    "color_mode", "strict_scraping", "down_payment_pct", "mortgage_rate", "loan_years"}
+                    "color_mode", "strict_scraping", "down_payment_pct", "mortgage_rate", "loan_years",
+                    "pmi_rate_pct", "closing_cost_pct"}
 _SHIPPED: tuple[set[tuple[str, str]], set[tuple[str, str]]] | None = None
 _LAYOUTS: list[dict[str, tuple[list[str], set[str]]]] | None = None
 

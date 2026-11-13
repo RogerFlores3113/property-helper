@@ -122,6 +122,25 @@ def _cost_cell(p: dict[str, Any]) -> dict[str, Any]:
     return cell
 
 
+def _cash_label(places: list[dict[str, Any]]) -> str:
+    modes = {p["cost"].get("mode") for p in places}
+    if modes == {"buy"}:
+        return "Cash needed to close (down payment, closing costs)"
+    if modes == {"rent"}:
+        return "Cash needed at move-in"
+    return "Cash needed up front (to close, or at move-in)"
+
+
+def _cash_cell(p: dict[str, Any]) -> dict[str, Any]:
+    """Cash due up front: for a buyer, down payment + closing costs (a guess when not entered) + a special assessment the
+    buyer pays; for a renter, the move-in cash."""
+    c = p["cost"].get("cash_to_close") if p["cost"].get("mode") == "buy" else p["cost"].get("cash_at_move_in")
+    cell = _money(c["total"]) if c else _cell(None)
+    if c and c.get("has_estimate"):
+        cell["text"] += " (closing costs are a guess)"
+    return cell
+
+
 def _per_person_cell(p: dict[str, Any]) -> dict[str, Any]:
     cell = _money(p.get("per_person"), True)
     if cell["value"] is not None and p["cost"].get("uncounted"):
@@ -198,7 +217,7 @@ def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     # ---- the facts
     section("The place", [
-        _row("price", "Listed price", [_money(p.get("price")) for p in places], "low"),
+        _row("price", "Price" if all(p["cost"].get("mode") == "buy" for p in places) else "Listed price", [_money(p.get("price")) for p in places], "low"),
         _row("down", "Down payment", [_money(p["cost"].get("down_payment")) if p["cost"].get("mode") == "buy" else _cell(None) for p in places], only_if_any=True),
         _row("loan", "Loan amount", [_money(p["cost"].get("loan_amount")) if p["cost"].get("mode") == "buy" else _cell(None) for p in places], "low", only_if_any=True),
         _row("beds", "Bedrooms", [_num(p.get("beds")) for p in places]),
@@ -214,6 +233,10 @@ def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
     section("Dates and money up front", [
         _row("available", "Available from", [_plain(helpers.day_text(p["available_from"]) if p.get("available_from") else "") for p in places], only_if_any=True),
         _row("lease_months", "Lease length (months)", [_num(p.get("lease_months")) for p in places], only_if_any=True),
+        _row("cash_up_front", _cash_label(places), [_cash_cell(p) for p in places],
+             "low" if len({p["cost"].get("mode") for p in places}) == 1 else None, only_if_any=True),
+        _row("days_on_market", "Days on the market", [_num(p.get("days_on_market")) for p in places], only_if_any=True)
+        if any(p["cost"].get("mode") == "buy" for p in places) else None,
         _row("deposit", "Deposit (comes back)", [_money(p.get("deposit")) for p in places], "low", only_if_any=True),
         _row("upfront", "Fees paid once (application, move-in, broker, pet)", [_money(p["cost"].get("one_time_total")) if p["cost"].get("mode") == "rent" else _cell(None) for p in places], "low", only_if_any=True),
     ])

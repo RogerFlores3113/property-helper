@@ -72,7 +72,7 @@
   {% for c in criteria %}
   <form method="post" action="/criteria/{{ c.id }}" class="crit-form">
     <div class="field"><label for="cl-{{ c.id }}">Name ({{ KIND_LABELS.get(c.kind, c.kind) }})</label><input id="cl-{{ c.id }}" name="label" type="text" value="{{ c.label }}" placeholder="{{ crit_labels.get(c.id, '') }}"></div>
-    {% set kind = c.kind %}{% set t = c.target %}{% set pre = 'c' ~ c.id %}{% include "_criterion_target.html" %}
+    {% set kind = c.kind %}{% set t = c.target %}{% set pre = 'c' ~ c.id %}{% set search_mode = shown.mode %}{% include "_criterion_target.html" %}
     <div class="field"><label for="cw-{{ c.id }}">How much it matters</label><input id="cw-{{ c.id }}" name="weight" type="number" min="0" max="100" step="1" value="{{ c.weight|round|int }}" style="width:5rem"></div>
     <div class="checks"><input id="cd-{{ c.id }}" type="checkbox" name="dealbreaker" value="1"{% if c.dealbreaker %} checked{% endif %}><label for="cd-{{ c.id }}">Must have</label></div>
     {{ button("Save", small=True) }}
@@ -80,7 +80,7 @@
   </form>
   {% endfor %}
   <p class="fine">Leave a name empty and a plain one is made for you.</p>
-  {% else %}<p>Nothing here yet. Add a few things below, such as a most-per-month price and a commute.</p>{% endif %}
+  {% else %}<p>Nothing here yet. Add a few things below, such as {{ 'a most-you-would-pay price' if shown.mode == 'buy' else 'a most-per-month price' }} and a commute.</p>{% endif %}
 
   <h3>Add something that matters</h3>
   <form method="post" action="/search/{{ shown.id }}/criteria" class="stack" data-kind-form>
@@ -88,7 +88,7 @@
       <select id="nc-kind" name="kind" data-kind-select>{% for k in CRITERION_KINDS %}<option value="{{ k }}">{{ KIND_LABELS.get(k, k) }}</option>{% endfor %}</select></div>
     <div class="field"><label for="nc-label">Name (optional)</label><input id="nc-label" name="label" type="text" placeholder="Left empty, a plain name is made for you"></div>
     <div class="crit-form">
-      <div class="field" data-kinds="price"><label for="nc-max">Price: most per month</label><input id="nc-max" name="t_max" type="number" step="any"></div>
+      <div class="field" data-kinds="price"><label for="nc-max">{{ "Price: most you'd pay for the home" if shown.mode == 'buy' else 'Price: most per month, all in' }}</label><input id="nc-max" name="t_max" type="number" step="any"></div>
       <div class="field" data-kinds="beds baths sqft"><label for="nc-min">Bedrooms, bathrooms or size: at least</label><input id="nc-min" name="t_min" type="number" step="any"></div>
       <div class="field" data-kinds="commute"><label for="nc-anchor">Commute: to</label><select id="nc-anchor" name="t_anchor_id"><option value="">The first important place</option>{% for a in anchors %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}</select></div>
       <div class="field" data-kinds="commute"><label for="nc-mode">Commute: by</label><select id="nc-mode" name="t_mode">{% for m in COMMUTE_MODES %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>

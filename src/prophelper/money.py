@@ -4,7 +4,9 @@ Rent: price + utilities_estimate + parking_cost + pet_rent + other_monthly_fees
       + (application_fee + move_in_fees + broker_fee + pet_fee) / lease_months (12 when empty).
 The deposit is shown but not spread (it comes back).
 Buy:  monthly principal and interest + PMI (when the down payment is under 20%) + property_tax / 12 + insurance / 12 + hoa.
-      An estimate, not advice.
+      An estimate, not advice. ``cash_to_close`` is kept apart from the monthly cost: down payment + closing costs
+      (the number entered, else an estimate of closing_cost_pct of the price) + a special assessment the buyer pays
+      (treated as one amount, not billed monthly).
 
 Each function returns ``{"total", "lines", "missing", "notes", ...}``. ``total`` is None when the main price is
 missing. ``lines`` is ``[{"key", "label", "amount", "note"}]`` in display order, ``missing`` names the numbers that
@@ -17,7 +19,8 @@ from __future__ import annotations
 from typing import Any
 
 DEFAULT_LEASE_MONTHS = 12
-DEFAULT_BUY = {"down_payment_pct": 20.0, "mortgage_rate": 6.5, "loan_years": 30, "pmi_rate_pct": 0.5}
+DEFAULT_BUY = {"down_payment_pct": 20.0, "mortgage_rate": 6.5, "loan_years": 30, "pmi_rate_pct": 0.5,
+               "closing_cost_pct": 3.0}
 PMI_BELOW_PCT = 20.0  # mortgage insurance is estimated when the down payment is under this share of the price
 PRIVATE_PARKING = ("garage", "covered", "lot")
 
@@ -133,6 +136,52 @@ def cash_at_move_in(place: dict[str, Any]) -> dict[str, Any] | None:
     return {"total": _r(sum(v for _, v in parts)), "parts": [{"label": a, "amount": b} for a, b in parts]}
 
 
+def _listing_estimate_note(place: dict[str, Any], total: float | None, lines: list[dict[str, Any]]) -> str:
+    """"The listing estimates $2,310/mo; ours is $2,708 because it counts PMI and HOA." Empty when the listing quotes
+    no payment of its own (it is read from the saved listing text, so no column is needed)."""
+    text = str(place.get("listing_text") or "")
+    if total is None or "pay" not in text.lower():
+        return ""
+    try:
+        from .parsers import listing_estimated_payment
+        est = listing_estimated_payment(text)
+    except Exception:  # the listing text is only a hint
+        return ""
+    if not est:
+        return ""
+    names = {"pmi": "PMI", "tax": "property tax", "insurance": "insurance", "hoa": "HOA"}
+    counted = [names[l["key"]] for l in lines if l["key"] in names and (l["amount"] or 0) > 0]
+    if abs(total - est) < 1:
+        return f"The listing estimates {_dollars(est)}/mo, about the same as ours."
+    if total > est:
+        why = f" because ours counts {_join_words(counted)}" if counted else ""
+        return f"The listing estimates {_dollars(est)}/mo; ours is {_dollars(total)}{why}."
+    return (f"The listing estimates {_dollars(est)}/mo; ours is {_dollars(total)}. "
+            "Listings often count costs we don't know yet, so ask what theirs includes.")
+
+
+def cash_to_close(place: dict[str, Any], cfg: dict[str, float] | None = None) -> dict[str, Any] | None:
+    """Cash a buyer needs at closing: down payment, closing costs (entered, else a guess of closing_cost_pct of the
+    price, marked ``estimated``) and a special assessment when the buyer pays it. None without a price."""
+    cfg = cfg or dict(DEFAULT_BUY)
+    price = num(place.get("price"))
+    if not price:
+        return None
+    down = price * cfg["down_payment_pct"] / 100
+    parts: list[dict[str, Any]] = [{"label": "Down payment", "amount": _r(down), "estimated": False}]
+    closing = num(place.get("closing_costs"))
+    if closing is None:
+        pct = cfg.get("closing_cost_pct", DEFAULT_BUY["closing_cost_pct"])
+        parts.append({"label": f"Closing costs (a guess: {pct:g}% of the price)", "amount": _r(price * pct / 100), "estimated": True})
+    else:
+        parts.append({"label": "Closing costs", "amount": _r(closing), "estimated": False})
+    sa = num(place.get("special_assessment"))
+    if sa and str(place.get("special_assessment_payer") or "") == "buyer":
+        parts.append({"label": "Special assessment (you pay it)", "amount": _r(sa), "estimated": False})
+    return {"total": _r(sum(p["amount"] for p in parts)), "parts": parts,
+            "has_estimate": any(p["estimated"] for p in parts)}
+
+
 def monthly_payment(principal: float, annual_rate_pct: float, years: float) -> float:
     """Principal and interest per month for a fixed-rate loan."""
     n = int(round(years * 12))
@@ -194,10 +243,19 @@ def buy_cost(place: dict[str, Any], settings: dict[str, Any] | None = None) -> d
     else:
         lines.append(_line("hoa", "HOA", hoa))
     total = None if pi is None else _r(sum(l["amount"] or 0 for l in lines))
-    return {"mode": "buy", "total": total, "lines": lines, "missing": missing, "uncounted": uncounted,
+    cash = cash_to_close(place, cfg)
+    sa, payer = num(place.get("special_assessment")), str(place.get("special_assessment_payer") or "")
+    if sa and payer == "buyer":
+        notes.append(f"The special assessment ({_dollars(sa)}, paid by you) is counted once in the cash to close, not in the monthly cost.")
+    elif sa and payer == "seller":
+        notes.append(f"A special assessment of {_dollars(sa)} is paid by the seller, so it is not counted.")
+    elif sa:
+        notes.append(f"A special assessment of {_dollars(sa)} is listed but who pays it is not filled in, so it is not counted. Ask.")
+    listing_note = _listing_estimate_note(place, total, lines)
+    return {"mode": "buy", "listing_estimate_note": listing_note, "total": total, "lines": lines, "missing": missing, "uncounted": uncounted,
             "notes": notes, "deposit": None,
             "down_payment": None if down is None else _r(down), "loan_amount": None if loan is None else _r(loan),
-            "pmi": None if pmi is None else _r(pmi), "settings": cfg}
+            "pmi": None if pmi is None else _r(pmi), "settings": cfg, "cash_to_close": cash}
 
 
 def _dollars(n: float) -> str:

@@ -29,7 +29,8 @@ def panel_context(store: Store, place_id: int, **extra: Any) -> dict[str, Any]:
     latest: dict[str, dict[str, Any]] = {}
     for draft in store.list_drafts(place_id):  # newest first
         latest.setdefault(draft["kind"], draft)
-    features = [{"slug": slug, **info} for slug, info in ai.FEATURES.items()]
+    buy = search["mode"] == "buy"
+    features = [{"slug": slug, **info, **({"help": info["help_buy"]} if buy and info.get("help_buy") else {})} for slug, info in ai.FEATURES.items()]
     key = ai.key_status()
     prompts: dict[str, str] = {}
     if key["set"]:  # the exact text that goes to Anthropic, so nothing is a surprise
@@ -40,7 +41,7 @@ def panel_context(store: Store, place_id: int, **extra: Any) -> dict[str, Any]:
             except ValueError:
                 continue
     panel = {"key": key, "features": features, "latest": latest, "prompts": prompts, "result": None, "error": "", "active": "",
-             "purposes": [(slug, label) for slug, (label, _) in ai.PURPOSES.items()], "purpose": ai.DEFAULT_PURPOSE,
+             "purposes": [(slug, label) for slug, (label, _) in ai.purposes_for(search["mode"]).items()], "purpose": ai.DEFAULT_PURPOSE,
              "model": store.get_setting("ai_model") or ai.DEFAULT_MODEL, "has_listing": bool((place.get("listing_text") or "").strip())}
     panel.update(extra)
     full = enrich.enrich_places(store, search, [place])[0]
