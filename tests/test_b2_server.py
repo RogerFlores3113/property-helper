@@ -368,7 +368,7 @@ def test_todays_list_and_overview(store):
     store.update_search(store.current_search()["id"], hide_dealbreakers=True)
     out = text(call(s, "todays_list"))
     assert "Tours in the next 14 days:" in out and "Maple Row Flats" in out and "Waiting on a reply:" in out
-    assert "New places the user has not looked at:" in out and "Application checklist: 8 items" in out
+    assert "New places the user has not looked at:" in out and "Your own documents list: 7 items" in out
     ov = text(call(s, "get_overview"))
     assert "(current)" in ov and "Top places:" in ov and "hidden by deal-breakers" in ov and "Anchors" in ov
     assert "Rules:" in ov and "Stricter scraping guards: off." in ov

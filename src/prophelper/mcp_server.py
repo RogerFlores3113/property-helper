@@ -1185,9 +1185,10 @@ def build_server(store: Store) -> FastMCP:
             lines.append(f"Heads up: {_title(item['place'])} (id {item['place']['id']}): {item['text']}.")
         if not store.list_criteria(cur["id"]):
             lines.append("This search has no criteria yet, so nothing is scored. update_search can add some from what the user told you.")
-        todo = [c for c in store.list_checklist() if not c["done"]]
+        todo = [c for c in store.visible_checklist(cur) if not c["done"]]
         if todo:
-            lines.append(f"Application checklist: {len(todo)} item{'s' if len(todo) != 1 else ''} not done yet (" + ", ".join(_t(c['label'], 'checklist item', 40) for c in todo[:4]) + ("..." if len(todo) > 4 else "") + ").")
+            lines.append(f"Your own documents list: {len(todo)} item{'s' if len(todo) != 1 else ''} not marked ready yet (" + ", ".join(_t(c['label'], 'checklist item', 40) for c in todo[:4]) + ("..." if len(todo) > 4 else "") + "). "
+                         "This is the user's general list. Each place has its own ticks under 'Applying here' (get_place shows them), so a place can have a different count.")
         return reply("\n".join(lines), tours=len(tours), waiting=len(waiting), dates=len(dates), new_places=len(new), best_fits=[p["id"] for p in fits])
 
     # ------------------------------------------------------------ searches

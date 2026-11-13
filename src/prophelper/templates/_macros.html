@@ -101,7 +101,10 @@
 <form class="stage-form inline" method="post" action="/places/{{ place.id }}/stage"{% if board %} data-board-move{% endif %}>
   <label class="sr" for="{{ prefix }}-{{ place.id }}">Stage for {{ place.title }}</label>
   <select id="{{ prefix }}-{{ place.id }}" name="stage" data-autosubmit>
-    {% for s in stages_for(mode) %}<option value="{{ s }}"{% if s == place.stage %} selected{% endif %}>{{ s }}</option>{% endfor %}
+    {% for s in stages_for(mode) if s not in CLOSED_STAGES %}<option value="{{ s }}"{% if s == place.stage %} selected{% endif %}>{{ s }}</option>{% endfor %}
+    <optgroup label="Final steps">
+    {% for s in stages_for(mode) if s in CLOSED_STAGES %}<option value="{{ s }}"{% if s == place.stage %} selected{% endif %}>{{ s }}</option>{% endfor %}
+    </optgroup>
   </select>
   <noscript><button class="btn small" type="submit">Move</button></noscript>
 </form>

@@ -25,7 +25,7 @@
       <h3>{{ day.date|day }}{% if day.date == today %} (today){% endif %}</h3>
       <ul class="plain">
         {% for it in day.entries %}
-        <li><span class="chip {{ it.kind }}">{{ it.kind_label }}</span> {% if it.time %}<span class="fine">{{ it.time }}</span> {% endif %}<a href="{{ it.href }}">{{ it.title }}</a>{% if it.kind == 'tour' and it.tour.with_whom %} <span class="fine">with {{ it.tour.with_whom }}</span>{% endif %}</li>
+        <li><span class="chip {{ it.kind }}">{{ it.kind_label }}</span> {% if it.time %}<span class="fine">{{ it.time }}</span> {% endif %}<a href="{{ it.href }}">{{ it.title }}</a>{% if it.kind == 'tour' and it.tour.with_whom %} <span class="fine">with {{ it.tour.with_whom }}</span>{% endif %}{% if it.warn %} <span class="fine">&middot; {{ it.warn }}</span>{% endif %}</li>
         {% endfor %}
       </ul>
     </li>

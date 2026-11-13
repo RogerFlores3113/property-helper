@@ -46,15 +46,16 @@ def calendar_items(store: Store, search_id: int | None, start: date | None = Non
     if search_id is None:
         return []
     items: list[dict[str, Any]] = []
-    for t in store.list_tours(search_id=search_id):
-        if t["status"] == "cancelled":
-            continue
+    live_tours = [t for t in store.list_tours(search_id=search_id) if t["status"] != "cancelled"]
+    close = today_mod.close_tour_notes(live_tours)  # the same "15 minutes apart; check the drive" note Today shows
+    for t in live_tours:
         local = helpers.to_local(t["starts_at"])
         if local is None:
             continue
         items.append({"date": local.date(), "kind": "tour", "kind_label": KIND_LABELS["tour"], "time": helpers.clock_text(t["starts_at"]),
                       "sort": local.strftime("%H:%M"), "text": "Tour" + (" (done)" if t["status"] == "done" else ""),
-                      "title": t["title"], "place_id": t["place_id"], "href": f"/places/{t['place_id']}#tours", "tour": t})
+                      "title": t["title"], "place_id": t["place_id"], "href": f"/places/{t['place_id']}#tours", "tour": t,
+                      "warn": close.get(t["id"], "")})
     for p in store.list_places(search_id):
         if p["stage"] == "Passed" or p["hidden"]:
             continue

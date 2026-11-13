@@ -6,7 +6,9 @@
 <div class="page-head">
   <div>
     <h1>{{ place.title }} {{ sample_badge(place.is_sample) }}</h1>
-    <p class="sub">{{ place.address }}{% if place.unit %} #{{ place.unit }}{% endif %}{% if place.city %}, {{ place.city }}{% endif %}{% if place.state %} {{ place.state }}{% endif %}
+    {% set _street = (place.address ~ (' #' ~ place.unit if place.unit else ''))|trim if place.address else (('#' ~ place.unit) if place.unit else '') %}
+    {% set _locality = ((place.city or '') ~ ' ' ~ (place.state or ''))|trim %}
+    <p class="sub">{{ [_street, _locality]|select|join(', ') }}
       {% if place.url %} &middot; <a href="{{ place.url }}" rel="noopener noreferrer" target="_blank">{{ place.source or (place.url|host) }}</a>{% endif %}</p>
     <p>{{ stage_badge(place.stage) }}
       {% if place.score.fit != 'doesnt_fit' %}{{ score_pill(place.score_total, place.band) }}{% endif %}

@@ -27,7 +27,7 @@ from fastapi.responses import JSONResponse
 from . import backups, commute, enrich, helpers, parsers, paths, scoring, stages, today
 from .routes_geocode import lookup_for_anchor
 from .deps import get_store, is_htmx, redirect, render
-from .store import COMMUTE_MODES, NotFound, StageRuleError, Store
+from .store import COMMUTE_MODES, CRITERION_KINDS, NotFound, StageRuleError, Store
 
 router = APIRouter()
 
@@ -112,13 +112,26 @@ def _toured_hint(store: Store, place: dict[str, Any]) -> str:
     return "You haven't logged a tour for it. Add the tour on the place page if you want its checklist and notes kept."
 
 
+FINAL_STEP_NOTES = {
+    "Lease signed": "This says you signed the lease here. The place goes to the end of the board as won. You can move it back later.",
+    "Closed": "This says the sale closed and the home is yours. The place goes to the end of the board as won. You can move it back later.",
+    "Passed": "This says you decided against this place. It goes to the end of the board and stops showing up in your reminders. You can move it back later.",
+}
+
+
 @router.post("/places/{place_id}/stage", include_in_schema=False)
 async def move_place(request: Request, place_id: int):
     store = get_store(request)
     form = await request.form()
     stage = str(form.get("stage", ""))
     note = str(form.get("note", ""))
-    _place_or_404(store, place_id)
+    current = _place_or_404(store, place_id)
+    if not is_htmx(request) and str(form.get("confirm", "")) != "yes":
+        # Lease signed, Closed and Passed end the hunt for a place: ask first (a page, so it works without scripts).
+        target = stages.normalize_stage(_search_of(store, current)["mode"], stage)
+        if target and target != current["stage"] and stages.is_closed(target):
+            return render(request, "stage_confirm.html", place=current, target=target, note=note,
+                          meaning=FINAL_STEP_NOTES[target])
     try:
         place = store.move_stage(place_id, stage, note=note)
         hint = _toured_hint(store, place)
@@ -431,7 +444,10 @@ async def add_criterion(request: Request, search_id: int):
     target = _target_from_form(kind, form)
     label = str(form.get("label", "")).strip()
     try:
-        store.get_search(search_id)
+        search = store.get_search(search_id)
+        if kind not in CRITERION_KINDS:
+            plain = ", ".join(("Price" if k == "price" and search["mode"] == "buy" else scoring.KIND_LABELS.get(k, k)) for k in CRITERION_KINDS)
+            return redirect(f"/search?id={search_id}#criteria", error=f"Pick what kind of thing matters: {plain}.")
         if kind == "commute":
             if not store.list_anchors():
                 return redirect(f"/search?id={search_id}#anchors", error="A commute needs a place to travel to. Add an important place first, like Work or Campus, then add the commute.")

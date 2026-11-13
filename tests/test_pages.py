@@ -50,7 +50,7 @@ def test_privacy_lists_the_network_calls(client):
 
 def test_settings_has_its_sections(client):
     html = client.get("/settings").text
-    for name in ("Your data", "Map and lookups", "AI key and model", "On screen", "Sample data", "Stricter scraping guards"):
+    for name in ("Your data", "Map and lookups", "AI key and model", "On screen", "Sample data", "Stricter rules when Claude reads websites for you"):
         assert name in html
 
 
