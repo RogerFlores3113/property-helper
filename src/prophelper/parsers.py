@@ -429,7 +429,7 @@ def _app_fee_per_person(text: str) -> str:
 
 def _move_in_months(text: str) -> tuple[int, bool]:
     """(months of rent due at move-in, deposit also due) from "first and last month" or "first, last and deposit"."""
-    m = re.search(r"\bfirst\b(?:\s+month(?:'?s)?(?:\s+rent)?)?\s*(?:,|and|&|\+|/)\s*(?:and\s+)?\blast\b(?:\s+month(?:'?s)?(?:\s+rent)?)?"
+    m = re.search(r"\b(?:first|1st)\b(?:\s+month(?:'?s)?(?:\s+rent)?)?\s*(?:,|and|&|\+|/)\s*(?:and\s+)?\blast\b(?:\s+month(?:'?s)?(?:\s+rent)?)?"
                   r"(?:\s*(?:,|and|&|\+|/|plus)\s*(?:a\s+)?(?:the\s+)?(?:security\s+)?(deposit))?", text, re.I)
     if not m:
         return 0, False
@@ -522,6 +522,20 @@ def _utilities(text: str) -> str:
         found += re.findall(words, m.group(1))
     for m in re.finditer(r"\b(?:landlord|owner|management|property manager)\s+(?:pays?|covers?)\s+(?:for\s+)?((?:(?:" + words + r")\s*(?:,|/|&|and|\+)?\s*(?:and\s+)?){1,6})", low):
         found += re.findall(words, m.group(1))
+    return _ordered_utilities(found) if found else ""
+
+
+def _tenant_pays(text: str) -> str:
+    """"Tenant pays gas, electric" from "Tenant pays gas and electric" (utilities the listing says the renter pays), or ''."""
+    low = text.lower()
+    words = "|".join(re.escape(w) for w in _UTILITY_WORDS) + "|electricity|garbage|trash removal|sewage"
+    found: list[str] = []
+    for clause in re.split(r"\n|;|\.(?=\s|$)", low):
+        m = re.search(r"\b(?:tenants?|residents?|renters?|lessees?|you)\s*(?:pays?|are responsible for|is responsible for|responsible for|will pay|must pay|to pay)\b\s*(?:for\s+)?(?:all\s+)?(?:the\s+)?(.*)", clause)
+        if not m:
+            continue
+        rest = m.group(1)
+        found += re.findall(r"\b(?:" + words + r")\b", rest)
     return _ordered_utilities(found) if found else ""
 
 
@@ -714,12 +728,17 @@ _BUILDING = re.compile(
     r"|The\s+[A-Z][\w'&.-]*(?:\s+(?:at|on)\s+[A-Z][\w'&.-]*(?:\s+[A-Z][\w'&.-]*){0,3}))", re.U)
 
 
+_BUILDING_WORD = (r"(?:Apartments?|Apts?|Lofts?|Court|Flats|Residences?|Towers?|Commons|Villas?|Terrace|Manor|Gardens|Village|Place|Square|"
+                  r"Townhomes?|Townhouses|Condos?|Heights|Landing|Crossing|Park|Pointe?|Station|Lofts|Oaks|Woods|Ridge|Hills|Reserve|Club)")
+_AT_BUILDING = re.compile(r"\b(?:at|in)\s+((?:The\s+)?(?:[A-Z][\w'&.-]*\s+){0,3}" + _BUILDING_WORD + r"\b(?:\s+(?:Apartments?|Homes|Flats|Residences|Townhomes?|Condos?)\b)?)")
+
+
 def _building_name(text: str) -> str:
     for line in text.splitlines()[:30]:
         line = " ".join(line.strip(" \t|\u2022\u00b7*#").split())
         if not line or len(line) > 90 or _SITE_LINE.match(line):
             continue
-        m = _BUILDING.match(line)
+        m = _BUILDING.match(line) or _AT_BUILDING.search(line)
         if m:
             name = m.group(1).strip()
             if len(name) >= 6 and not re.match(r"(?:The\s+)?(?:Apartments?|Court|Place|Park|Square)$", name):
@@ -805,6 +824,10 @@ def parse_listing(text: str = "", url: str = "") -> dict[str, Any]:
     for key, value in (_try(lambda: _pet_fees(text)) or {}).items():
         put(key, value)
     put("utilities_included", _try(lambda: _utilities(text)))
+    pays = _try(lambda: _tenant_pays(text))
+    if pays:
+        # Nothing is included for these, so the monthly cost keeps its own estimate line (a guess), and the listing's words are kept.
+        facts.append(f"Tenant pays {pays}.")
     put("available_from", _try(lambda: _available(text)))
     put("lease_months", _try(lambda: _lease_months(text)))
     put("year_built", _try(lambda: _year_built(text)))
