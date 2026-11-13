@@ -162,8 +162,8 @@ def test_update_search_keeps_dates(store, setup):
 def test_footer_and_privacy_say_the_map_loads_openstreetmap_tiles(client):
     for path in ("/today", "/privacy"):
         html = client.get(path).text
-        assert "street tiles from OpenStreetMap" in html
-    assert "can turn that off in Settings" in client.get("/today").text
+        assert "OpenStreetMap" in html and "plain pins" in html
+    assert "street pictures" in client.get("/today").text
 
 
 def test_privacy_covers_open_in_claude_and_photos_warning(client):

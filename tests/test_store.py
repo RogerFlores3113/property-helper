@@ -14,7 +14,7 @@ def test_new_database_has_default_settings_and_version(store):
     assert store.schema_version >= 1
     assert store.get_setting("ai_model") == "claude-sonnet-5-5"
     assert store.get_setting_int("follow_up_days") == 3
-    assert store.get_setting_bool("map_tiles") is True
+    assert store.get_setting_bool("map_tiles") is False  # new folders start with map pictures off
     assert store.get_setting_bool("geocode") is False
     assert len(store.list_checklist()) >= 5  # the default tour checklist is seeded
 

@@ -39,13 +39,14 @@ OPEN_PATHS = {"/launch", "/api/health"}  # everything else needs the app window'
 KEY_HEADER = "x-prophelper-key"
 SESSION_MAX_AGE = 12 * 3600  # a browser window stays unlocked this long after its last page; every page renews it
 SESSIONS_KEPT = 20  # sessions remembered at once (one per launch); the oldest are forgotten first
-TILES = "https://tile.openstreetmap.org"  # map tiles: the only outside place a page may load pictures from
+TILES = "https://tile.openstreetmap.org"  # map tiles: allowed in img-src on /map only, and only when map pictures are on
 CSP_TEMPLATE = ("default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline'; img-src {img}; "
                 "object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'self'")
-CSP = CSP_TEMPLATE.format(img=f"'self' data: {TILES}")
+CSP = CSP_TEMPLATE.format(img="'self' data:")  # no outside picture source on any page
+CSP_MAP = CSP_TEMPLATE.format(img=f"'self' data: {TILES}")  # only the Map page, and only while map pictures are on
 # Only when the user turns on "Show listing photos" in Settings, and only on a place's own page, photo links the user
 # or the AI saved may load (the app never downloads them; the browser does, and only then).
-CSP_PHOTOS = CSP_TEMPLATE.format(img=f"'self' data: {TILES} https:")
+CSP_PHOTOS = CSP_TEMPLATE.format(img="'self' data: https:")
 # Page modules that other parts of the app add. A missing one is skipped, so the app runs while they are being built.
 OPTIONAL_ROUTERS = ("routes_map", "routes_calendar", "routes_compare", "routes_contacts", "routes_documents",
                     "routes_checklist", "routes_ai", "routes_csv", "routes_geocode", "routes_extra")
@@ -172,6 +173,8 @@ def create_app(store: Store, key: str | None = None) -> FastAPI:
         try:
             if path.startswith("/places/") and store.get_setting_bool("show_photos"):
                 return CSP_PHOTOS
+            if path == "/map" and store.get_setting_bool("map_tiles"):
+                return CSP_MAP
         except Exception:
             pass
         return CSP

@@ -4,7 +4,7 @@
 {% block body %}
 <link rel="stylesheet" href="/static/data.css">
 <div class="data-page">
-{% call page_head("Privacy", "Your data stays on this computer. The map loads street tiles from OpenStreetMap. Here is exactly what leaves, and when.") %}{% endcall %}
+{% call page_head("Privacy", "Your data stays on this computer. The map shows plain pins until you turn on street pictures. Here is exactly what leaves, and when.") %}{% endcall %}
 
 <section class="card">
   <h2>What is stored, and where</h2>
@@ -21,9 +21,9 @@
 
 <section class="card" id="network">
   <h2>What leaves this computer</h2>
-  <p>Only these five things can use the network. The first is on by default; the rest happen only when you turn them on or click them:</p>
+  <p>Only these five things can use the network. Each one happens only when you turn it on or click it:</p>
   <ol class="privacy-list">
-    <li><strong>Map tiles</strong> (the street pictures of the map). <strong>On by default.</strong> When you open the Map page, your browser loads them from OpenStreetMap (<code>tile.openstreetmap.org</code>). They are loaded by your browser, so OpenStreetMap sees the area you look at and your network address. Now: <strong>{{ 'on' if map_tiles else 'off' }}</strong>. <a href="/settings#map">Change it in Settings</a>; with tiles off the map shows places on a plain background and nothing is loaded from OpenStreetMap.</li>
+    <li><strong>Map tiles</strong> (the street pictures of the map). <strong>Off until you turn them on</strong> (a new data folder starts with them off; an older folder keeps the choice it had). Once on, when you open the Map page, your browser loads them from OpenStreetMap (<code>tile.openstreetmap.org</code>). They are loaded by your browser, so OpenStreetMap sees the area you look at and your network address. Now: <strong>{{ 'on' if map_tiles else 'off' }}</strong>. <a href="/settings#map">Change it in Settings</a>, or press "Show street map" on the Map page. With tiles off the map shows places on a plain background and nothing is loaded from OpenStreetMap; no other page ever loads a picture from another site (except listing photos, if you turn those on).</li>
     <li><strong>Address lookup</strong> ("Find map locations for addresses"). Off unless you turn it on. It uses OpenStreetMap's free address lookup (<code>nominatim.openstreetmap.org</code>), and only runs when you press a Find on map button on a place or an important place. If it is off, pressing the button asks you first. Now: <strong>{{ 'on' if geocode else 'off' }}</strong>. One lookup sends this:
       <ul>
         <li>the street address, city, state and ZIP of that one place, as the search words (not its name, unit, notes, listing text or rating);</li>

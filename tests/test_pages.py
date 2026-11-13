@@ -45,7 +45,7 @@ def test_nav_labels(client):
 def test_privacy_lists_the_network_calls(client):
     html = client.get("/privacy").text
     assert "tile.openstreetmap.org" in html and "nominatim.openstreetmap.org" in html and "api.anthropic.com" in html
-    assert "Open in Claude" in html and "Listing photos" in html and "On by default" in html
+    assert "Open in Claude" in html and "Listing photos" in html and "Off until you turn them on" in html
 
 
 def test_settings_has_its_sections(client):

@@ -96,7 +96,7 @@ def _settings_context(store: Store) -> dict[str, Any]:
             "follow_up_days": store.get_setting_int("follow_up_days", 3), "data_folder": str(paths.data_dir().resolve()),
             "places": store.count_places(include_archived=True), "archived_count": store.count_places(include_archived=True) - store.count_places(),
             "searches_count": len(store.list_searches(include_archived=True)), "files_count": _files_count(),
-            "folder_button": _folder_button_label(), "map_tiles": store.get_setting_bool("map_tiles", True),
+            "folder_button": _folder_button_label(), "map_tiles": store.get_setting_bool("map_tiles"),
             "geocode": store.get_setting_bool("geocode"), "show_photos": store.get_setting_bool("show_photos"),
             "strict": store.get_setting_bool("strict_scraping"), "strict_per_call": STRICT_ADDS_PER_CALL,
             "strict_per_hour": STRICT_ADDS_PER_HOUR, "down_payment_pct": store.get_setting("down_payment_pct"),
@@ -234,7 +234,7 @@ def remove_ai_key(request: Request):
 def privacy_page(request: Request):
     store = get_store(request)
     return render(request, "privacy.html", data_folder=str(paths.data_dir()), key=ai_key.key_status(),
-                  map_tiles=store.get_setting_bool("map_tiles", True), geocode=store.get_setting_bool("geocode"),
+                  map_tiles=store.get_setting_bool("map_tiles"), geocode=store.get_setting_bool("geocode"),
                   show_photos=store.get_setting_bool("show_photos"), geocode_agent=geocode.USER_AGENT,
                   ai_model=store.get_setting("ai_model"))
 

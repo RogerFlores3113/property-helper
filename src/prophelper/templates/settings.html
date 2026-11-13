@@ -37,10 +37,10 @@
 
 <details class="card" id="map">
   <summary><h2>Map and lookups</h2></summary>
-  <p class="fine">The map pictures are on by default. These are the only network uses besides AI and the Open in Claude link. <a href="/privacy#network">See exactly what is sent</a>.</p>
+  <p class="fine">The map pictures are off until you turn them on. These are the only network uses besides AI and the Open in Claude link. <a href="/privacy#network">See exactly what is sent</a>.</p>
   <form method="post" action="/settings" class="stack">
     <input type="hidden" name="map_tiles" value="0"><input type="hidden" name="geocode" value="0"><input type="hidden" name="show_photos" value="0">
-    <div class="checks"><input id="map_tiles" type="checkbox" name="map_tiles" value="1"{% if map_tiles %} checked{% endif %}><label for="map_tiles">Show map pictures (on by default: your browser loads street tiles from OpenStreetMap when you open the Map. Turn off to keep the map plain and load nothing)</label></div>
+    <div class="checks"><input id="map_tiles" type="checkbox" name="map_tiles" value="1"{% if map_tiles %} checked{% endif %}><label for="map_tiles">Show map pictures (off until you turn it on: your browser then loads street tiles from OpenStreetMap when you open the Map. Leave it off to keep the map plain and load nothing)</label></div>
     <div class="checks"><input id="geocode" type="checkbox" name="geocode" value="1"{% if geocode %} checked{% endif %}><label for="geocode">Find map locations for addresses (sends only a street address to OpenStreetMap's free lookup service, at most one a second, and only when you press Find on map)</label></div>
     <div class="checks"><input id="show_photos" type="checkbox" name="show_photos" value="1"{% if show_photos %} checked{% endif %}><label for="show_photos">Show listing photos (your browser loads each photo from whatever website the listing's photo link points to. A listing you saved or an AI app added could point to any site, which would then see your network address. Keep this off unless you trust your listings)</label></div>
     <h3>If you are buying</h3>
