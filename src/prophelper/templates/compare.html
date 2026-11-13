@@ -25,7 +25,7 @@
     <tr class="cmp-section"><th scope="colgroup" colspan="{{ places|length + 1 }}">{{ sec.title }}</th></tr>
     {% for r in sec.rows %}
     <tr class="{{ 'differs' if r.differs }}">
-      <th scope="row">{{ r.label }}{% if r.differs %} <span class="sr">(differs)</span>{% endif %}</th>
+      <th scope="row">{{ r.label }}{% if r.tied %} <span class="fine">(tied)</span>{% endif %}{% if r.differs %} <span class="sr">(differs)</span>{% endif %}</th>
       {% for c in r.cells %}
       <td class="{{ 'best' if c.best }}{{ ' worst' if c.worst }}{{ ' unknown' if c.unknown }}">{{ c.text }}{% if c.best %} <span aria-hidden="true">&#10003;</span><span class="sr">({{ r.best_note }})</span>{% elif c.worst %}<span class="sr">({{ 'highest' if r.best_note == 'lowest' else 'lowest' }})</span>{% endif %}</td>
       {% endfor %}

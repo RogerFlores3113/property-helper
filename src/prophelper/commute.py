@@ -52,7 +52,7 @@ def label(minutes: int | float | None, source: str = "you", mode: str = "") -> s
     way = f" {MODE_LABELS.get(mode, mode)}" if mode else ""
     if source == "estimate":
         return f"about {n} min{way} (estimate)"
-    return f"{n} min{way}" + (f" ({source})" if source in ("you", "ai") else "")
+    return f"{n} min{way}" + (" (you)" if source == "you" else " (added by Claude)" if source == "ai" else "")
 
 
 def has_point(thing: dict[str, Any] | None) -> bool:
@@ -108,6 +108,15 @@ def resolve_all(place: dict[str, Any], anchors: Iterable[dict[str, Any]], stored
     return out
 
 
+def _fastest(place: dict[str, Any], anchor: dict[str, Any], stored: list[dict[str, Any]]) -> dict[str, Any] | None:
+    """The fastest known way to one important place: walk, bike or drive (typed or estimated), plus any way someone
+    typed (transit too), so a typed commute shows even when the important place has no map point."""
+    options = [r for m in ("walk", "bike", "drive") if (r := resolve(place, anchor, m, stored))]
+    options += [r for m in MODES if m not in ("walk", "bike", "drive") and (r := resolve(place, anchor, m, stored))
+                and r["source"] in ("you", "ai")]
+    return min(options, key=lambda r: r["minutes"]) if options else None
+
+
 def top_commute(place: dict[str, Any], anchors: Iterable[dict[str, Any]], stored: Iterable[dict[str, Any]] = (),
                 prefer_mode: str | None = None) -> dict[str, Any] | None:
     """The one commute a card shows: the first anchor's best answer. ``prefer_mode`` (a criterion's mode) first,
@@ -119,9 +128,8 @@ def top_commute(place: dict[str, Any], anchors: Iterable[dict[str, Any]], stored
             r = resolve(place, a, prefer_mode, stored)
             if r:
                 return {"anchor": a.get("name", ""), "anchor_id": a.get("id"), **r}
-        options = [r for m in ("walk", "bike", "drive") if (r := resolve(place, a, m, stored))]
-        if options:
-            best = min(options, key=lambda r: r["minutes"])
+        best = _fastest(place, a, stored)
+        if best:
             return {"anchor": a.get("name", ""), "anchor_id": a.get("id"), **best}
     return None
 
@@ -146,7 +154,8 @@ def pick_for_anchor(place: dict[str, Any], anchor: dict[str, Any], stored: Itera
         found = resolve(place, anchor, mode, stored)
         if found:
             return mode, found
-    options = [(m, r) for m in ("walk", "bike", "drive") if (r := resolve(place, anchor, m, stored))]
+    options = [(m, r) for m in MODES if (r := resolve(place, anchor, m, stored))
+               and (m != "transit" or r["source"] in ("you", "ai"))]
     if options:
         return min(options, key=lambda o: o[1]["minutes"])
     return mode, None

@@ -61,7 +61,7 @@ def enrich_place(store: Store, place: dict[str, Any], search: dict[str, Any], *,
             continue
         anchor = by_id.get(c["target"].get("anchor_id") or first_anchor)
         mode = c["target"].get("mode") or "bike"
-        found = commute_mod.resolve(place, anchor, mode, commutes) if anchor else None
+        found = commute_mod.pick_for_anchor(place, anchor, commutes, mode)[1] if anchor else None
         if found and not any(t["anchor_id"] == anchor["id"] for t in commute_tops):
             commute_tops.append({"anchor": anchor["name"], "anchor_id": anchor["id"], **found,
                                  "short": f"{anchor['name']} {found['minutes']:.0f} min {found['mode']}"})

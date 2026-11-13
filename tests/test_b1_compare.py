@@ -19,7 +19,7 @@ def test_mark_lowest_wins_and_flags_a_difference():
 def test_mark_highest_wins_and_ties_all_win():
     cells = [cell(80.0), cell(80.0), cell(60.0)]
     differs, note = compare.mark(cells, "high")
-    assert differs and note == "highest" and [c["best"] for c in cells] == [True, True, False]
+    assert differs and note == "tied" and [c["best"] for c in cells] == [True, True, False]
 
 
 def test_mark_nothing_best_when_all_equal():
