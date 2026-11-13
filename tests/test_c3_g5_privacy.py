@@ -1,12 +1,10 @@
 """Cycle 3, G5: map pictures off for new folders, the page rules, private folder modes."""
 import os
-import sqlite3
 
 import pytest
 
 from prophelper import paths
 from prophelper.store import Store
-from tests.conftest import local_client
 
 
 def test_new_folder_has_tiles_off_and_plain_map_with_one_button(client, sample_store):
