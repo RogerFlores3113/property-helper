@@ -86,12 +86,12 @@ def test_building_names_are_picked_up():
 
 
 # 4 -------------------------------------------------------------------- move-in
-def test_first_and_last_month_adds_to_move_in_fees():
+def test_first_and_last_month_is_not_a_fee():
     out = parse("Elm Street Flats\n$1,200/mo 1 bed. Move-in: first and last month required. $100 admin fee.")
-    assert out["price"] == 1200 and out["move_in_fees"] == 2500
+    assert out["price"] == 1200 and out["move_in_fees"] == 100
     assert "First and last month" in out["found_in_listing"]
     out = parse("$1,000/mo 2 bed. First, last and deposit due at signing.")
-    assert out["move_in_fees"] == 2000
+    assert "move_in_fees" not in out
     assert "deposit" in out["found_in_listing"]
     assert "move_in_fees" not in parse("$1,000/mo 2 bed. First month and deposit due at signing.")
 

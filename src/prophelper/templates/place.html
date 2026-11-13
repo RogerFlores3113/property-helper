@@ -115,6 +115,7 @@
     {% else %}<p>Add the price to see the true monthly cost.</p>{% endif %}
     {% if c.missing %}<p class="missing">Not counted yet because it is missing: {{ c.missing|join(', ') }}. Fill {{ 'it' if c.missing|length == 1 else 'them' }} in under Facts to make the number honest.</p>{% endif %}
     {% for n in c.notes %}<p class="fine">{{ n }}</p>{% endfor %}
+    {% if c.cash_at_move_in %}<p class="cost-headline"><strong>Cash needed at move-in: {{ c.cash_at_move_in.total|money }}</strong><br><span class="fine">{% for part in c.cash_at_move_in.parts %}{{ part.label }} {{ part.amount|money }}{{ ', ' if not loop.last }}{% endfor %}. This is not part of the monthly cost.</span></p>{% endif %}
     {% if c.deposit %}<p class="fine">Deposit: {{ c.deposit|money }} (comes back, so it is not in the monthly number).</p>{% endif %}
   </section>
 

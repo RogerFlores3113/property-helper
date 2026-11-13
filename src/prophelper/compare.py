@@ -20,8 +20,8 @@ from typing import Any
 from . import helpers
 
 MIN_PLACES, MAX_PLACES = 2, 4
-LAUNDRY_RANK = {"in_unit": 2, "in_building": 1, "none": 0}
-LAUNDRY_TEXT = {"in_unit": "In the unit", "in_building": "In the building", "none": "None"}
+LAUNDRY_RANK = {"in_unit": 3, "in_building": 2, "hookups": 1, "none": 0}
+LAUNDRY_TEXT = {"in_unit": "In the unit", "in_building": "In the building", "hookups": "Hookups only", "none": "None"}
 PARKING_RANK = {"garage": 4, "covered": 3, "lot": 2, "street": 1, "none": 0}
 PARKING_TEXT = {"garage": "Garage", "covered": "Covered", "lot": "Lot", "street": "Street", "none": "None"}
 PETS_TEXT = {"cats": "Cats", "dogs": "Dogs", "both": "Cats and dogs", "none": "No pets"}

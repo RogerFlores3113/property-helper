@@ -836,7 +836,7 @@ def parse_listing(text: str = "", url: str = "") -> dict[str, Any]:
         months, with_deposit = _try(lambda: _move_in_months(text)) or (0, False)
         rent = out.get("price")
         if months and isinstance(rent, (int, float)) and 200 <= rent <= 30000 and not _SALE_WORDS.search(text):
-            put("move_in_fees", float(out.get("move_in_fees") or 0) + months * float(rent))
+            # First and last month are cash due at move-in, not a fee: money.cash_at_move_in shows them apart.
             line = f"First and last month's rent (${months * float(rent):,.0f}) are due at move-in"
             if with_deposit:
                 line += ", plus a deposit" + ("." if out.get("deposit") else " (the listing gives no amount).")

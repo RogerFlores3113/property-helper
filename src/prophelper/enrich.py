@@ -45,7 +45,7 @@ def enrich_place(store: Store, place: dict[str, Any], search: dict[str, Any], *,
     people = int(search.get("people") or 1)
     cost = money.true_monthly_cost(place, search["mode"], settings, people)
     flags = redflags.local_flags(place, peer_prices or [])
-    serious = bool(flags) and scoring.has_serious_flag(place, peer_prices or [])
+    serious = redflags.is_serious(place, peer_prices or [])
     score = scoring.score_place(place, criteria, mode=search["mode"], anchors=anchors, commutes=commutes,
                                 custom_scores=store.custom_scores(place["id"]), budget_max=search.get("budget_max"),
                                 settings=settings, cost=cost, serious_flag=serious, people=people)
@@ -87,7 +87,7 @@ def enrich_place(store: Store, place: dict[str, Any], search: dict[str, Any], *,
         "top_commute": commute_mod.top_commute(place, anchors, commutes, prefer),
         "commute_tops": commute_tops,
         "next": _next_date(place, tours),
-        "flags": flags,
+        "flags": flags, "possible_scam": serious,
         "hidden_by_dealbreaker": bool(search.get("hide_dealbreakers") and score["fails_dealbreaker"] and not protected),
         "people": people, "per_person": cost.get("per_person"),
     })

@@ -18,29 +18,12 @@ TOP_FITS = 3
 LATE_AVAILABLE_DAYS = 7  # available_from more than this many days after the move-in date is a warning
 _MONTHS = ("Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec")
 
-# The red-flag rules that point at a scam rather than a nitpick. ``redflags`` may later return dicts with a
-# "severity"; those are read too (see :func:`flag_is_high`).
-_HIGH_RULE_INDEXES = (0, 1, 2, 3, 5, 6)
 
-
-def _high_messages() -> set[str]:
-    try:
-        rules = redflags._rules()
-    except Exception:  # pragma: no cover - the red flag module changed shape
-        return set()
-    return {rules[i][1] for i in _HIGH_RULE_INDEXES if i < len(rules)}
-
-
-def flag_is_high(flag: Any, high_messages: set[str] | None = None) -> bool:
-    if isinstance(flag, dict):
-        return str(flag.get("severity", "")).lower() in ("high", "red", "serious")
-    return flag in (high_messages if high_messages is not None else _high_messages())
-
-
-def possible_scam(place: dict[str, Any], high_messages: set[str] | None = None) -> bool:
-    """True when the place has a red flag of high severity."""
-    hm = high_messages if high_messages is not None else _high_messages()
-    return any(flag_is_high(f, hm) for f in place.get("flags") or [])
+def possible_scam(place: dict[str, Any], high_messages: Any = None) -> bool:
+    """True when the place is a possible scam. One rule, ``redflags.is_serious`` (enrich stores the answer on the place)."""
+    if "possible_scam" in place:
+        return bool(place["possible_scam"])
+    return redflags.is_serious(place)
 
 
 def fails_dealbreakers(place: dict[str, Any]) -> bool:
@@ -50,14 +33,13 @@ def fails_dealbreakers(place: dict[str, Any]) -> bool:
     return bool(score.get("fails_dealbreaker") or place.get("hidden_by_dealbreaker"))
 
 
-def fits(place: dict[str, Any], high_messages: set[str] | None = None) -> bool:
-    return place.get("score_total") is not None and not fails_dealbreakers(place) and not possible_scam(place, high_messages)
+def fits(place: dict[str, Any], high_messages: Any = None) -> bool:
+    return place.get("score_total") is not None and not fails_dealbreakers(place) and not possible_scam(place)
 
 
 def best_fits(rows: list[dict[str, Any]], limit: int = TOP_FITS) -> list[dict[str, Any]]:
     """The top places by score that fit. ``rows`` are enriched places. Passed, won and hidden places are skipped."""
-    hm = _high_messages()
-    open_rows = [p for p in rows if not p["hidden"] and p["stage"] not in ("Passed", "Lease signed", "Closed") and fits(p, hm)]
+    open_rows = [p for p in rows if not p["hidden"] and p["stage"] not in ("Passed", "Lease signed", "Closed") and fits(p)]
     open_rows.sort(key=lambda p: (-p["score_total"], p["title"].lower()))
     return open_rows[:limit]
 
@@ -175,9 +157,8 @@ def new_places(store: Store, search: dict[str, Any]) -> list[dict[str, Any]]:
     unseen = store.new_places(search["id"])
     if not unseen:
         return []
-    hm = _high_messages()
     rows = enrich.enrich_places(store, search, unseen)
-    return [p for p in rows if not fails_dealbreakers(p) and not possible_scam(p, hm)]
+    return [p for p in rows if not fails_dealbreakers(p) and not possible_scam(p)]
 
 
 def late_availability(rows: list[dict[str, Any]], search: dict[str, Any], limit: int = 5) -> list[dict[str, Any]]:

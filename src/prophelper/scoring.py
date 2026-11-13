@@ -31,8 +31,8 @@ KIND_LABELS: dict[str, str] = {
 UNKNOWN_SCORE = 0.5
 CAP_DEALBREAKER = 49
 CAP_SCAM = 50
-LAUNDRY_RANK = {"in_unit": 2, "in_building": 1, "none": 0}
-LAUNDRY_WORDS = {"in_unit": "in the unit", "in_building": "in the building", "none": "none"}
+LAUNDRY_RANK = {"in_unit": 3, "in_building": 2, "hookups": 1, "none": 0}
+LAUNDRY_WORDS = {"in_unit": "in the unit", "in_building": "in the building", "hookups": "hookups only", "none": "none"}
 PARKING_RANK = {"garage": 3, "covered": 2, "lot": 1, "street": 0, "none": -1}
 PETS_OK = {"cats": ("cats", "both"), "dogs": ("dogs", "both"), "both": ("both",)}
 
@@ -175,9 +175,9 @@ def _score_laundry(c: dict[str, Any], place: dict[str, Any]) -> dict[str, Any]:
     if have not in LAUNDRY_RANK:
         return _unknown(target, "Laundry")
     if want == "in_unit":
-        score = {"in_unit": 1.0, "in_building": 0.5, "none": 0.0}[have]
+        score = {"in_unit": 1.0, "in_building": 0.5, "hookups": 0.25, "none": 0.0}[have]
     else:
-        score = {"in_unit": 1.0, "in_building": 1.0, "none": 0.0}[have]
+        score = {"in_unit": 1.0, "in_building": 1.0, "hookups": 0.25, "none": 0.0}[have]
     return _result(score, LAUNDRY_WORDS[have], target, "", known=True, passes=score >= 1.0,
                    gap="" if score >= 1.0 else f"Laundry: {LAUNDRY_WORDS[have]}, wanted {target}")
 
@@ -270,17 +270,8 @@ def score_criterion(c: dict[str, Any], place: dict[str, Any], ctx: dict[str, Any
 
 
 def has_serious_flag(place: dict[str, Any], peer_prices: Iterable[float] = ()) -> bool:
-    """True when the listing text shows a serious scam sign (payment that can't be undone, a deposit before a showing,
-    mailed keys, ID or bank details up front). Uses ``redflags.is_serious`` when that module has it."""
-    fn = getattr(redflags, "is_serious", None)
-    if callable(fn):
-        return bool(fn(place, peer_prices))
-    text = " ".join(str(place.get(k) or "") for k in ("listing_text", "title", "notes", "ai_notes"))
-    for name in ("_PAYMENT", "_ZELLE_ONLY", "_BEFORE_SHOWING", "_KEYS_MAIL", "_PRIVATE_INFO"):
-        pattern = getattr(redflags, name, None)
-        if pattern is not None and pattern.search(text):
-            return True
-    return False
+    """True when the listing shows a serious scam sign. The rule lives in ``redflags.is_serious``."""
+    return redflags.is_serious(place, peer_prices)
 
 
 def score_place(place: dict[str, Any], criteria: Iterable[dict[str, Any]], *, mode: str = "rent",

@@ -10,7 +10,7 @@
   {{ field("Available from", "available_from", v.get('available_from', ''), kind="date") }}
   {{ field("Lease length (months)", "lease_months", v.get('lease_months', ''), kind="number") }}
   {{ field("Utilities included", "utilities_included", v.get('utilities_included', ''), hint="For example: water, trash, internet. Say 'all' if everything is.") }}
-  {{ select("Laundry", "laundry", [("in_unit", "In the unit"), ("in_building", "In the building"), ("none", "None")], v.get('laundry', ''), blank="Not sure") }}
+  {{ select("Laundry", "laundry", [("in_unit", "In the unit"), ("in_building", "In the building"), ("hookups", "Hookups only (bring your own)"), ("none", "None")], v.get('laundry', ''), blank="Not sure") }}
   {{ select("Parking", "parking", [("garage", "Garage"), ("covered", "Covered"), ("lot", "Lot"), ("street", "Street"), ("none", "None")], v.get('parking', ''), blank="Not sure") }}
   {{ select("Pets", "pets", [("both", "Cats and dogs"), ("cats", "Cats only"), ("dogs", "Dogs only"), ("none", "No pets")], v.get('pets', ''), blank="Not sure") }}
   {{ field("Security deposit", "deposit", v.get('deposit', ''), kind="number", step="any") }}

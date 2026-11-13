@@ -46,7 +46,7 @@ DOCUMENT_KINDS: tuple[str, ...] = ("lease", "application", "disclosure", "inspec
 DRAFT_KINDS: tuple[str, ...] = ("fit score", "red flags", "tour questions", "message")
 CRITERION_KINDS: tuple[str, ...] = ("price", "beds", "baths", "sqft", "commute", "laundry", "dishwasher", "parking",
                                     "pets", "newer", "custom")
-LAUNDRY_VALUES = ("in_unit", "in_building", "none")
+LAUNDRY_VALUES = ("in_unit", "in_building", "hookups", "none")
 PARKING_VALUES = ("garage", "covered", "lot", "street", "none")
 PETS_VALUES = ("cats", "dogs", "both", "none")
 COMMUTE_MODES = ("walk", "bike", "transit", "drive")
@@ -452,6 +452,8 @@ _ENUM_ALIASES: dict[str, dict[str, str]] = {
                 "in building": "in_building", "in-building": "in_building", "in_building": "in_building",
                 "building": "in_building", "shared": "in_building", "on site": "in_building", "on-site": "in_building",
                 "laundry room": "in_building", "common": "in_building", "community": "in_building",
+                "hookups": "hookups", "hookup": "hookups", "hook-ups": "hookups", "hook ups": "hookups", "w/d hookups": "hookups",
+                "w/d hookup": "hookups", "washer dryer hookups": "hookups", "washer/dryer hookups": "hookups",
                 "none": "none", "no": "none", "no laundry": "none", "off site": "none"},
     "parking": {"garage": "garage", "covered": "covered", "carport": "covered", "lot": "lot", "surface": "lot",
                 "off street": "lot", "off-street": "lot", "driveway": "lot", "street": "street", "on street": "street",

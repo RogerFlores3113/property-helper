@@ -105,7 +105,32 @@ def rent_cost(place: dict[str, Any]) -> dict[str, Any]:
     if deposit:
         notes.append(f"Deposit ${deposit:,.0f} is not included in the monthly cost because it comes back.")
     return {"mode": "rent", "total": total, "lines": lines, "missing": missing, "notes": notes, "deposit": deposit,
-            "lease_months": months, "one_time_total": _r(one_total), "uncounted": uncounted}
+            "lease_months": months, "one_time_total": _r(one_total), "uncounted": uncounted,
+            "cash_at_move_in": cash_at_move_in(place)}
+
+
+def cash_at_move_in(place: dict[str, Any]) -> dict[str, Any] | None:
+    """Cash needed on move-in day for a rental: first month, last month (when the listing asks for it), deposit,
+    application fee and the other one-time fees. Kept apart from the true monthly cost (the last month's rent and the
+    deposit are not a yearly cost). None when there is no rent to build it on."""
+    rent = num(place.get("price"))
+    if not rent:
+        return None
+    last = False
+    try:
+        from .parsers import _move_in_months
+        last = bool(_move_in_months(str(place.get("listing_text") or ""))[0])
+    except Exception:  # the listing text is only a hint
+        pass
+    parts = [("First month's rent", rent)]
+    if last:
+        parts.append(("Last month's rent", rent))
+    for key, label in (("deposit", "Deposit"), ("application_fee", "Application fee"), ("move_in_fees", "Move-in fees"),
+                       ("broker_fee", "Broker fee"), ("pet_fee", "Pet fee")):
+        v = num(place.get(key))
+        if v:
+            parts.append((label, v))
+    return {"total": _r(sum(v for _, v in parts)), "parts": [{"label": a, "amount": b} for a, b in parts]}
 
 
 def monthly_payment(principal: float, annual_rate_pct: float, years: float) -> float:

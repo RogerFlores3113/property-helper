@@ -100,7 +100,7 @@ PLACE_PARAMS: list[tuple[str, Any, str]] = [
     ("photo_urls", list[str], "Links to photos (the app never downloads them)"),
     ("price", float | str, "Monthly rent (or the asking price when buying), US dollars"),
     ("beds", float | str, "Bedrooms, 0 for a studio"), ("baths", float | str, ""), ("sqft", int | str, ""),
-    ("laundry", str, "in_unit, in_building or none"),
+    ("laundry", str, "in_unit, in_building, hookups or none"),
     ("dishwasher", bool, "True or false"),
     ("parking", str, "garage, covered, lot, street or none"),
     ("parking_cost", float | str, "Monthly parking cost"),
@@ -229,7 +229,7 @@ def _is_blank(v: Any) -> bool:
 def _facts(p: dict[str, Any]) -> str:
     bits = [helpers.place_line(p)]
     if p.get("laundry"):
-        bits.append({"in_unit": "washer and dryer in the unit", "in_building": "laundry in the building", "none": "no laundry"}[p["laundry"]])
+        bits.append({"in_unit": "washer and dryer in the unit", "in_building": "laundry in the building", "hookups": "washer and dryer hookups only", "none": "no laundry"}[p["laundry"]])
     if p.get("dishwasher") is not None:
         bits.append("dishwasher" if p["dishwasher"] else "no dishwasher")
     if p.get("parking"):

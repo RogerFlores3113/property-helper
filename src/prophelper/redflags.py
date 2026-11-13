@@ -61,6 +61,18 @@ def _rules() -> list[tuple[re.Pattern[str], str]]:
     ]
 
 
+def _text(place: dict[str, Any]) -> str:
+    return " ".join(str(place.get(k) or "") for k in ("listing_text", "title", "notes", "ai_notes"))
+
+
+def is_serious(place: dict[str, Any], peer_prices: Iterable[float] = ()) -> bool:
+    """The one rule for "possible scam": payment that can't be undone (wire, gift card, Zelle, Cash App, Venmo), a deposit
+    before a showing, an owner who is abroad, keys by mail, or private info (like a Social Security number) asked for
+    before a tour. Scoring, Today and the Board all use this. ``peer_prices`` is kept for callers that pass it."""
+    text = _text(place)
+    return any(p.search(text) for p in (_PAYMENT, _ZELLE_ONLY, _PAY_APP, _BEFORE_SHOWING, _ABROAD, _KEYS_MAIL, _PRIVATE_INFO))
+
+
 def local_flags(place: dict[str, Any], peer_prices: Iterable[float] = ()) -> list[str]:
     """Plain-words signs to check on this place. ``peer_prices``: prices of the other places in the same search."""
     text = " ".join(str(place.get(k) or "") for k in ("listing_text", "title", "notes", "ai_notes"))
