@@ -64,8 +64,23 @@ def enrich_place(store: Store, place: dict[str, Any], search: dict[str, Any], *,
         if found and not any(t["anchor_id"] == anchor["id"] for t in commute_tops):
             commute_tops.append({"anchor": anchor["name"], "anchor_id": anchor["id"], **found,
                                  "short": f"{anchor['name']} {found['minutes']:.0f} min {found['mode']}"})
+    # One commute per anchor for Compare: the mode of that anchor's commute criterion, else the fastest way.
+    crit_mode = {}
+    for c in criteria:
+        if c["kind"] == "commute":
+            crit_mode.setdefault(c["target"].get("anchor_id") or first_anchor, c["target"].get("mode") or "bike")
+    commute_all = []
+    for a in anchors:
+        mode = crit_mode.get(a["id"])
+        found = commute_mod.resolve(place, a, mode, commutes) if mode else None
+        if found is None:
+            options = [r for m in ("walk", "bike", "drive") if (r := commute_mod.resolve(place, a, m, commutes))]
+            found = min(options, key=lambda r: r["minutes"]) if options else None
+        if found:
+            commute_all.append({"anchor": a["name"], "anchor_id": a["id"], **found})
     out = dict(place)
     out.update({
+        "commute_all": commute_all,
         "cost": cost, "cost_total": cost["total"], "score": score, "score_total": score["total"],
         "band": scoring.score_band(score["total"]),
         "commutes": commute_mod.resolve_all(place, anchors, commutes),

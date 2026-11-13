@@ -75,10 +75,18 @@ def _rows(sample_store, titles):
 
 
 def test_build_rows_marks_the_cheapest_and_highest_score(sample_store):
+    for p in sample_store.list_places(sample_store.current_search()["id"]):  # fill in what is missing so every cost is complete
+        if p["utilities_estimate"] is None:
+            sample_store.update_place(p["id"], utilities_estimate=60)
+        if p["parking"] in ("garage", "covered", "lot") and p["parking_cost"] is None:
+            sample_store.update_place(p["id"], parking_cost=0)
     places, sections, rows = _rows(sample_store, ["Maple Row Flats", "Quad View Lofts", "Prairie Commons"])
     cost = rows["cost"]
     costs = [p["cost_total"] for p in places]
     assert cost["differs"]
+    # a cost with something left out ("insurance not counted yet") is never marked lowest
+    assert not any(c["best"] for c, p in zip(cost["cells"], places) if p["cost"]["uncounted"])
+    assert not any(p["cost"]["uncounted"] for p in places)
     assert [c["best"] for c in cost["cells"]] == [v == min(costs) for v in costs]
     scores = [p["score_total"] for p in places]
     assert [c["best"] for c in rows["score"]["cells"]] == [v == max(scores) for v in scores]

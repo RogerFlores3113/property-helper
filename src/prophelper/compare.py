@@ -9,8 +9,9 @@
   is the same, or where fewer than two places have a value, marks no best.
 * ``differs``: True when the known values are not all the same, so the page can highlight the row.
 
-Which way is better is set per row in ``ROW_BETTER``: ``low`` (cost, fees, commute minutes), ``high`` (score, size,
-newer) or ``None`` (a fact where neither is better, such as bedrooms: only differences are shown).
+Which way is better is set per row: ``low`` (cost, fees, commute minutes), ``high`` (score, size, newer year built) or
+``None`` (a fact where neither is better, such as bedrooms: only differences are shown). An unknown value is never
+best or worst, and a cost that leaves something out ("insurance not counted yet") is never marked lowest.
 """
 from __future__ import annotations
 
@@ -62,21 +63,44 @@ def mark(cells: list[dict[str, Any]], better: str | None) -> tuple[bool, str]:
     differs = len(set(round(v, 4) for v in known)) > 1
     for c in cells:
         c["best"] = False
+        c["worst"] = False
     if not differs or better not in ("low", "high"):
         return differs, ""
-    target = min(known) if better == "low" else max(known)
+    # An incomplete number (something left out of it) can't win; it also can't be called the worst.
+    ranked = [c["value"] for c in cells if c["value"] is not None and not c.get("incomplete")]
+    if len(set(round(v, 4) for v in ranked)) < 2:
+        return differs, ""
+    best, worst = (min(ranked), max(ranked)) if better == "low" else (max(ranked), min(ranked))
     for c in cells:
-        c["best"] = c["value"] is not None and abs(c["value"] - target) < 1e-9
+        ok = c["value"] is not None and not c.get("incomplete")
+        c["best"] = ok and abs(c["value"] - best) < 1e-9
+        c["worst"] = ok and abs(c["value"] - worst) < 1e-9
     return differs, "lowest" if better == "low" else "highest"
 
 
 def _cell(text: Any, value: float | None = None) -> dict[str, Any]:
     unknown = text is None or text == ""
-    return {"text": UNKNOWN if unknown else str(text), "value": value, "best": False, "unknown": unknown}
+    return {"text": UNKNOWN if unknown else str(text), "value": value, "best": False, "worst": False,
+            "unknown": unknown, "incomplete": False}
 
 
 def _money(v: Any, cents: bool = False) -> dict[str, Any]:
     return _cell(helpers.money(v, cents=cents) if v is not None else None, float(v) if v is not None else None)
+
+
+def _year(v: Any) -> dict[str, Any]:
+    """A year with no thousands comma (2016, not 2,016)."""
+    n = None
+    try:
+        n = int(float(v)) if v not in (None, "") else None
+    except (TypeError, ValueError):
+        n = None
+    return _cell(str(n) if n else None, float(n) if n else None)
+
+
+def unknown_list(p: dict[str, Any]) -> list[str]:
+    """What is really unknown about an enriched place: criteria with no value and costs not filled in."""
+    return list(dict.fromkeys([*p["score"]["unknown"], *p["cost"]["missing"]]))
 
 
 def _num(v: Any, suffix: str = "") -> dict[str, Any]:
@@ -87,6 +111,41 @@ def _yes_no(v: Any) -> dict[str, Any]:
     if v is None:
         return _cell(None)
     return _cell("Yes" if v else "No", 1.0 if v else 0.0)
+
+
+def _cost_cell(p: dict[str, Any]) -> dict[str, Any]:
+    cell = _money(p["cost_total"], True)
+    unc = p["cost"].get("uncounted") or []
+    if cell["value"] is not None and unc:
+        cell["text"] += f" ({', '.join(unc)} not counted yet)"
+        cell["incomplete"] = True
+    return cell
+
+
+def _per_person_cell(p: dict[str, Any]) -> dict[str, Any]:
+    cell = _money(p.get("per_person"), True)
+    if cell["value"] is not None and p["cost"].get("uncounted"):
+        cell["incomplete"] = True
+    if cell["value"] is not None:
+        cell["text"] += f" ({p['people']} people)"
+    return cell
+
+
+FIT_TEXT = {"fits": "Yes", "doesnt_fit": "Doesn't fit", "check_first": "Check first: possible scam"}
+
+
+def _fit_cell(p: dict[str, Any]) -> dict[str, Any]:
+    fit = p["score"].get("fit", "fits")
+    reasons = "; ".join(p["score"].get("fit_reasons") or [])
+    return _cell(FIT_TEXT.get(fit, fit) + (f" ({reasons})" if reasons and fit != "fits" else ""))
+
+
+def _score_cell(p: dict[str, Any]) -> dict[str, Any]:
+    cell = _num(p["score_total"])
+    n = p["score"].get("unknown_count") or 0
+    if cell["value"] is not None and n:
+        cell["text"] += f" (based on {n} unknown{'s' if n != 1 else ''})"
+    return cell
 
 
 def _plain(text: Any) -> dict[str, Any]:
@@ -100,10 +159,6 @@ def _row(key: str, label: str, cells: list[dict[str, Any]], better: str | None =
     return {"key": key, "label": label, "cells": cells, "differs": differs, "best_note": note}
 
 
-def _commute_key(c: dict[str, Any]) -> tuple[str, str]:
-    return (c.get("anchor", ""), c.get("mode", ""))
-
-
 def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
     """Sections of rows for these enriched places (same order as ``places``)."""
     sections: list[dict[str, Any]] = []
@@ -115,8 +170,11 @@ def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
 
     # ---- the headline numbers
     section("The short version", [
-        _row("cost", "True monthly cost", [_money(p["cost_total"], True) for p in places], "low"),
-        _row("score", "Fit score (out of 100)", [_num(p["score_total"]) for p in places], "high"),
+        _row("cost", "True monthly cost", [_cost_cell(p) for p in places], "low"),
+        _row("per_person", "Per person each month", [_per_person_cell(p) for p in places], "low", only_if_any=True)
+        if any(p.get("per_person") is not None for p in places) else None,
+        _row("fit", "Does it fit?", [_fit_cell(p) for p in places]) if any(p["score"].get("fit", "fits") != "fits" for p in places) else None,
+        _row("score", "Fit score (out of 100)", [_score_cell(p) for p in places], "high"),
         _row("stage", "Stage", [_plain(p["stage"]) for p in places]),
         _row("rating", "Your rating (1 to 5)", [_num(p.get("rating")) for p in places], "high", only_if_any=True),
     ])
@@ -135,16 +193,18 @@ def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
             amount = found["amount"] if found else None
             cells.append(_money(amount, True) if amount is not None else _cell(None))
         cost_rows.append(_row("cost-" + key, label, cells, "low", only_if_any=True))
-    cost_rows.append(_row("missing", "Not counted yet", [_plain(", ".join(p["cost"]["missing"]) or "nothing missing") for p in places]))
+    cost_rows.append(_row("missing", "Not counted yet", [_plain(", ".join(p["cost"]["missing"]) or "nothing, all costs are in") for p in places]))
     section("What it really costs, line by line", cost_rows)
 
     # ---- the facts
     section("The place", [
         _row("price", "Listed price", [_money(p.get("price")) for p in places], "low"),
+        _row("down", "Down payment", [_money(p["cost"].get("down_payment")) if p["cost"].get("mode") == "buy" else _cell(None) for p in places], only_if_any=True),
+        _row("loan", "Loan amount", [_money(p["cost"].get("loan_amount")) if p["cost"].get("mode") == "buy" else _cell(None) for p in places], "low", only_if_any=True),
         _row("beds", "Bedrooms", [_num(p.get("beds")) for p in places]),
         _row("baths", "Bathrooms", [_num(p.get("baths")) for p in places]),
-        _row("sqft", "Size (sq ft)", [_num(p.get("sqft")) for p in places], "high"),
-        _row("year_built", "Year built", [_num(p.get("year_built")) for p in places], "high"),
+        _row("sqft", "Size (sq ft, bigger is better)", [_num(p.get("sqft")) for p in places], "high"),
+        _row("year_built", "Year built (newer is better)", [_year(p.get("year_built")) for p in places], "high"),
         _row("laundry", "Laundry", [_cell(LAUNDRY_TEXT.get(p.get("laundry") or ""), LAUNDRY_RANK.get(p.get("laundry") or "")) for p in places], "high"),
         _row("dishwasher", "Dishwasher", [_yes_no(p.get("dishwasher")) for p in places], "high"),
         _row("parking", "Parking", [_cell(PARKING_TEXT.get(p.get("parking") or ""), PARKING_RANK.get(p.get("parking") or "")) for p in places], "high"),
@@ -158,19 +218,20 @@ def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
         _row("upfront", "Fees paid once (application, move-in, broker, pet)", [_money(p["cost"].get("one_time_total")) if p["cost"].get("mode") == "rent" else _cell(None) for p in places], "low", only_if_any=True),
     ])
 
-    # ---- commutes
-    seen: list[tuple[str, str]] = []
+    # ---- commutes: one row per anchor, using the mode of that anchor's commute criterion
+    anchors: list[tuple[Any, str]] = []
     for p in places:
-        for c in p["commutes"]:
-            if _commute_key(c) not in seen:
-                seen.append(_commute_key(c))
+        for c in p.get("commute_all", []):
+            if not any(c["anchor"] == name for _, name in anchors):
+                anchors.append((c["anchor_id"], c["anchor"]))
     commute_rows = []
-    for anchor, mode in seen:
-        cells = []
+    for aid, name in anchors:
+        cells, mode = [], ""
         for p in places:
-            c = next((x for x in p["commutes"] if _commute_key(x) == (anchor, mode)), None)
+            c = next((x for x in p.get("commute_all", []) if x["anchor"] == name), None)
+            mode = mode or (c["mode"] if c else "")
             cells.append(_cell(c["label"], float(c["minutes"])) if c else _cell(None))
-        commute_rows.append(_row(f"commute-{anchor}-{mode}", f"{mode.capitalize()} to {anchor}", cells, "low"))
+        commute_rows.append(_row(f"commute-{aid}", f"To {name}" + (f" ({mode})" if mode else ""), cells, "low"))
     section("Commutes", commute_rows)
 
     # ---- the score, criterion by criterion
@@ -192,6 +253,7 @@ def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 pct = round(item["score"] * 100)
                 cells.append(_cell(f"{pct}%" + (" (fails)" if item.get("dealbreaker_status") == "fail" else ""), float(pct)))
         score_rows.append(_row("score-" + label, label, cells, "high"))
+    score_rows.append(_row("unknown", "Still unknown", [_plain(", ".join(unknown_list(p)) or "nothing, everything is filled in") for p in places]))
     section("Score, criterion by criterion", score_rows)
     return sections
 
