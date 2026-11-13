@@ -165,6 +165,13 @@ def _score_cell(p: dict[str, Any]) -> dict[str, Any]:
     return cell
 
 
+def _opinion_cell(p: dict[str, Any]) -> dict[str, Any]:
+    o = p.get("opinions")
+    if not o:
+        return _cell(None)
+    return _cell(f"{o['average']:g} (average of {o['count']})", float(o["average"]))
+
+
 def _plain(text: Any) -> dict[str, Any]:
     return _cell(text or None)
 
@@ -194,6 +201,8 @@ def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
         _row("score", "Fit score (out of 100)", [_score_cell(p) for p in places], "high"),
         _row("stage", "Stage", [_plain(p["stage"]) for p in places]),
         _row("rating", "Your rating (1 to 5)", [_num(p.get("rating")) for p in places], "high", only_if_any=True),
+        _row("opinions", "Average of the people's ratings (1 to 5)", [_opinion_cell(p) for p in places], "high", only_if_any=True)
+        if any(p.get("opinions") for p in places) else None,
     ])
 
     # ---- cost line by line

@@ -62,6 +62,8 @@ def test_migration_adds_place_dates_to_an_old_database(tmp_path):
         con.execute(f"ALTER TABLE places DROP COLUMN {col}")
     for col in ("pet_kind", "pet_weight", "pet_count"):
         con.execute(f"ALTER TABLE searches DROP COLUMN {col}")
+    con.execute("DROP TABLE place_opinions")
+    con.execute("ALTER TABLE searches DROP COLUMN people_names")
     con.execute("PRAGMA user_version = 1")
     con.commit()
     con.close()

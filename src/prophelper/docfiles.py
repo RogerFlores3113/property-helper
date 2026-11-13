@@ -48,6 +48,11 @@ def place_folder(place_id: int) -> Path:
     return paths.files_dir() / str(int(place_id))
 
 
+def too_big_text() -> str:
+    """The one sentence shown for a file over the limit."""
+    return f"That file is too big (limit {LIMIT_TEXT})."
+
+
 def check_upload(name: str, size: int) -> str:
     """'' when the upload is fine, else one plain sentence saying why not."""
     if not display_name(name):
@@ -55,7 +60,7 @@ def check_upload(name: str, size: int) -> str:
     if size <= 0:
         return "That file is empty."
     if size > LIMIT_BYTES:
-        return f"That file is too big. Files can be up to {LIMIT_TEXT}."
+        return too_big_text()
     return ""
 
 

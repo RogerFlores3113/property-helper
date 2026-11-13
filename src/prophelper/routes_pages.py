@@ -358,7 +358,7 @@ async def create_search(request: Request):
 async def update_search(request: Request, search_id: int):
     store = get_store(request)
     form = await request.form()
-    values: dict[str, Any] = {k: form.get(k) for k in ("name", "mode", "area", "move_in", "target_close", "budget_max", "notes", "people", "pet_kind", "pet_weight", "pet_count") if k in form}
+    values: dict[str, Any] = {k: form.get(k) for k in ("name", "mode", "area", "move_in", "target_close", "budget_max", "notes", "people", "pet_kind", "pet_weight", "pet_count", "people_names") if k in form}
     values["hide_dealbreakers"] = "1" if form.get("hide_dealbreakers") == "1" else "0"
     try:
         store.update_search(search_id, **values)
