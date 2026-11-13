@@ -109,7 +109,7 @@
       }).then(function (info) {
         var days = card.querySelector("[data-days]");
         if (days) { days.textContent = info.days === 0 ? "Moved today" : info.days + " day" + (info.days === 1 ? "" : "s") + " in stage"; }
-        say("Moved " + company + " to " + stage + ".");
+        say("Moved " + company + " to " + stage + "." + (info.note ? " " + info.note : ""));
       }).catch(function () {
         fromBody.insertBefore(card, next && next.parentNode === fromBody ? next : fromBody.querySelector(".col-empty"));
         card.dataset.stage = oldStage;

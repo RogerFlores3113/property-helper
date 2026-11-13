@@ -53,6 +53,6 @@
     </form>
   </article>
   {% else %}
-  <p class="fine">No tours yet. Book one above and it shows on Today and the Calendar. Booking moves the place to Tour booked.</p>
+  <p class="fine">No tours yet. Book one above and it shows on Today and the Calendar.{% if search.mode == 'buy' %} Booking a tour doesn't change the stage; move the place yourself.{% else %} Booking moves a Saved or Contacted place to Tour booked.{% endif %}</p>
   {% endfor %}
 </section>

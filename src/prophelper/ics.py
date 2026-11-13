@@ -48,6 +48,11 @@ def _utc(dt: datetime) -> str:
     return dt.astimezone(timezone.utc).strftime("%Y%m%dT%H%M%SZ")
 
 
+def _floating(dt: datetime) -> str:
+    """Local wall-clock time with no zone and no Z, so a 10:00 tour shows at 10:00 in any calendar app."""
+    return dt.astimezone().strftime("%Y%m%dT%H%M%S")
+
+
 def _day(d: date) -> str:
     return d.strftime("%Y%m%d")
 
@@ -58,7 +63,8 @@ def build_calendar(items: list[dict[str, Any]], now: datetime | None = None) -> 
     Each item: ``uid`` (a stable text such as ``tour-4``), ``summary``, optional ``description`` and ``location``,
     optional ``updated`` (the row's own saved time, used for DTSTAMP so the same data gives the same file), and
     either ``starts_at`` (a stored UTC timestamp) with optional ``duration_minutes`` for a timed event, or ``date``
-    (``YYYY-MM-DD``) for an all-day event. An item that can't be read is skipped, so one bad row never breaks the file.
+    (``YYYY-MM-DD``) for an all-day event. Timed events are written as floating local time (no trailing Z, the
+    wall-clock time on this computer), all-day ones as DATE values. Only DTSTAMP is UTC, as the format requires. An item that can't be read is skipped, so one bad row never breaks the file.
     """
     now = now or datetime.now(timezone.utc)
     lines: list[str] = ["BEGIN:VCALENDAR", "VERSION:2.0", "PRODID:-//Property Helper//EN", "CALSCALE:GREGORIAN",
@@ -73,7 +79,7 @@ def build_calendar(items: list[dict[str, Any]], now: datetime | None = None) -> 
             if start is None:
                 continue
             end = start + timedelta(minutes=int(it.get("duration_minutes") or 30))
-            when = [f"DTSTART:{_utc(start)}", f"DTEND:{_utc(end)}"]
+            when = [f"DTSTART:{_floating(start)}", f"DTEND:{_floating(end)}"]
         else:
             d = _date_or_none(it.get("date"))
             if d is None:

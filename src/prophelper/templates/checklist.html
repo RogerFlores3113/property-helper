@@ -2,7 +2,7 @@
 {% from "_macros.html" import page_head, button, field %}
 {% block title %}Application checklist &middot; Property Helper{% endblock %}
 {% block body %}
-{% call page_head("Application checklist", "What most landlords ask for, so you are ready before you apply.") %}
+{% call page_head("Application checklist", "What a lender and seller usually ask for, so you are ready before you make an offer." if mode == "buy" else "What most landlords ask for, so you are ready before you apply.") %}
   <a class="btn small" href="#add">Add an item</a>
 {% endcall %}
 <p class="lead">Property Helper keeps this list, not copies of your documents. Keep the papers themselves wherever you keep them now.</p>
@@ -39,10 +39,19 @@
   {% else %}<p class="fine">The list is empty. Add what a landlord is likely to ask for.</p>{% endif %}
 </section>
 
+{% if missing %}
+<section class="card" aria-labelledby="usual-h">
+  <h2 id="usual-h">The usual {{ 'buyer' if mode == 'buy' else 'renter' }} items</h2>
+  <p class="fine">Not on your list yet: {{ missing|join(', ') }}.</p>
+  <form method="post" action="/checklist/defaults" class="stack"><input type="hidden" name="mode" value="{{ mode }}">
+    <p>{{ button("Add them to my list", small=True) }}</p></form>
+</section>
+{% endif %}
+
 <section class="card" id="add" aria-labelledby="add-h">
   <h2 id="add-h">Add an item</h2>
   <form method="post" action="/checklist/items" class="stack">
-    {{ field("What it is", "label", required=True, id="new-label", placeholder="Letter from my employer") }}
+    {{ field("What it is", "label", required=True, id="new-label", placeholder="{{ 'Letter from my lender' if mode == 'buy' else 'Letter from my employer' }}") }}
     {{ field("Note (optional)", "note", id="new-note") }}
     <p>{{ button("Add to the list", kind="primary") }}</p>
   </form>
