@@ -4,8 +4,8 @@
 {% elif kind in ('beds', 'baths', 'sqft') %}
 <div class="field"><label for="{{ pre }}-min">At least</label><input id="{{ pre }}-min" name="t_min" type="number" step="any" value="{{ t.get('min', '') }}"></div>
 {% elif kind == 'commute' %}
-<div class="field"><label for="{{ pre }}-anchor">To</label>
-  <select id="{{ pre }}-anchor" name="t_anchor_id"><option value="">First anchor</option>{% for a in anchors %}<option value="{{ a.id }}"{% if t.get('anchor_id') == a.id %} selected{% endif %}>{{ a.name }}</option>{% endfor %}</select></div>
+<div class="field"><label for="{{ pre }}-anchor">Commute to</label>
+  <select id="{{ pre }}-anchor" name="t_anchor_id"><option value="">The first important place</option>{% for a in anchors %}<option value="{{ a.id }}"{% if t.get('anchor_id') == a.id %} selected{% endif %}>{{ a.name }}</option>{% endfor %}</select></div>
 <div class="field"><label for="{{ pre }}-mode">By</label>
   <select id="{{ pre }}-mode" name="t_mode">{% for m in COMMUTE_MODES %}<option value="{{ m }}"{% if (t.get('mode') or 'bike') == m %} selected{% endif %}>{{ m }}</option>{% endfor %}</select></div>
 <div class="field"><label for="{{ pre }}-min">Minutes or less</label><input id="{{ pre }}-min" name="t_minutes" type="number" step="1" value="{{ t.get('minutes', '') }}"></div>

@@ -24,7 +24,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from . import backups, enrich, helpers, parsers, paths, stages
+from . import backups, commute, enrich, helpers, parsers, paths, scoring, stages
+from .routes_geocode import lookup_for_anchor
 from .deps import get_store, is_htmx, redirect, render
 from .store import COMMUTE_MODES, NotFound, StageRuleError, Store
 
@@ -261,12 +262,54 @@ async def delete_place(request: Request, place_id: int):
 
 
 # --------------------------------------------------------------------------- Search
+KIND_TARGET_KEYS = {"price": ("max",), "beds": ("min",), "baths": ("min",), "sqft": ("min",),
+                    "commute": ("anchor_id", "mode", "minutes"), "laundry": ("want",), "parking": ("want",),
+                    "pets": ("want",), "newer": ("year",)}
+
+
 def _target_from_form(kind: str, form: Any) -> dict[str, Any]:
+    """Only the boxes this kind of criterion uses. The Add form has one choice box per kind (``t_want_laundry`` and so on);
+    the edit form has ``t_want``."""
     t: dict[str, Any] = {}
-    for key in ("max", "min", "anchor_id", "mode", "minutes", "want", "year"):
-        if f"t_{key}" in form and str(form.get(f"t_{key}")).strip() != "":
-            t[key] = str(form.get(f"t_{key}")).strip()
+    for key in KIND_TARGET_KEYS.get(kind, ()):
+        for name in (f"t_{key}_{kind}", f"t_{key}"):
+            if name in form and str(form.get(name)).strip() != "":
+                t[key] = str(form.get(name)).strip()
+                break
     return t
+
+
+def _commute_target(store: Store, target: dict[str, Any]) -> dict[str, Any]:
+    """A commute with no place chosen means the first important place: say which one, so the label can name it."""
+    if target.get("anchor_id") in (None, ""):
+        anchors = store.list_anchors()
+        if anchors:
+            target = {**target, "anchor_id": anchors[0]["id"]}
+    return target
+
+
+def _commute_label(store: Store, target: dict[str, Any]) -> str:
+    try:
+        a = store.get_anchor(int(target["anchor_id"]))
+    except (KeyError, ValueError, TypeError, NotFound):
+        return ""
+    try:
+        mins = float(target.get("minutes")) if target.get("minutes") not in (None, "") else None
+    except (TypeError, ValueError):
+        mins = None
+    return commute.commute_label(str(target.get("mode") or "bike"), mins, a["name"])
+
+
+def _same_target(a: dict[str, Any], b: dict[str, Any]) -> bool:
+    def norm(t: dict[str, Any]) -> dict[str, str]:
+        out = {}
+        for k, v in t.items():
+            try:
+                out[k] = f"{float(v):g}"
+            except (TypeError, ValueError):
+                out[k] = str(v).strip().lower()
+        return out
+    return norm(a) == norm(b)
 
 
 @router.get("/search", include_in_schema=False)
@@ -277,8 +320,12 @@ def search_page(request: Request, id: int | None = None):
         shown = store.get_search(id) if id else current
     except NotFound:
         raise HTTPException(404, "That search doesn't exist.") from None
+    anchors = store.list_anchors()
+    criteria = store.list_criteria(shown["id"]) if shown else []
+    ctx = {"anchors": {a["id"]: a for a in anchors}}
+    crit_labels = {c["id"]: scoring._auto_label(c["kind"], c["target"], ctx) for c in criteria}
     return render(request, "search.html", current=current, shown=shown, searches=store.list_searches(include_archived=True),
-                  criteria=store.list_criteria(shown["id"]) if shown else [], anchors=store.list_anchors(),
+                  criteria=criteria, crit_labels=crit_labels, anchors=anchors,
                   place_counts={s["id"]: store.count_places(search_id=s["id"]) for s in store.list_searches(include_archived=True)})
 
 
@@ -288,8 +335,7 @@ async def create_search(request: Request):
     form = await request.form()
     try:
         s = store.add_search(str(form.get("name", "")), str(form.get("mode", "rent")), area=form.get("area", ""),
-                             move_in=form.get("move_in", "") if form.get("mode") != "buy" else None,
-                             target_close=form.get("target_close", "") if form.get("mode") == "buy" else None,
+                             move_in=form.get("move_in", ""), target_close=form.get("target_close", ""),
                              budget_max=form.get("budget_max", ""), notes=form.get("notes", ""))
         store.set_current_search(s["id"])
     except ValueError as exc:
@@ -370,14 +416,27 @@ async def add_criterion(request: Request, search_id: int):
     store = get_store(request)
     form = await request.form()
     kind = str(form.get("kind", ""))
+    target = _target_from_form(kind, form)
+    label = str(form.get("label", "")).strip()
     try:
-        store.add_criterion(search_id, kind, label=str(form.get("label", "")), weight=form.get("weight") or 10,
-                            dealbreaker=form.get("dealbreaker") == "1", target=_target_from_form(kind, form))
+        store.get_search(search_id)
+        if kind == "commute":
+            if not store.list_anchors():
+                return redirect(f"/search?id={search_id}#anchors", error="A commute needs a place to travel to. Add an important place first, like Work or Campus, then add the commute.")
+            target = _commute_target(store, target)
+            label = label or _commute_label(store, target)
+        existing = store.list_criteria(search_id)
+        dupe = any(c["kind"] == kind and _same_target(c["target"], target) for c in existing) if kind != "custom" else False
+        store.add_criterion(search_id, kind, label=label, weight=form.get("weight") or 10,
+                            dealbreaker=form.get("dealbreaker") == "1", target=target)
     except NotFound:
         raise HTTPException(404, "That search doesn't exist.") from None
     except ValueError as exc:
         return redirect(f"/search?id={search_id}#criteria", error=str(exc))
-    return redirect(f"/search?id={search_id}#criteria", notice="Added.")
+    note = "Added."
+    if dupe:
+        note += " Heads up: you already have one just like it, so it will count twice. Remove one if that was not what you meant."
+    return redirect(f"/search?id={search_id}#criteria", notice=note)
 
 
 @router.post("/criteria/{criterion_id}", include_in_schema=False)
@@ -386,10 +445,17 @@ async def update_criterion(request: Request, criterion_id: int):
     form = await request.form()
     try:
         c = store.get_criterion(criterion_id)
-        store.update_criterion(criterion_id, label=str(form.get("label", "")), weight=form.get("weight") or 0,
-                               dealbreaker=form.get("dealbreaker") == "1", target=_target_from_form(c["kind"], form))
+        target = _target_from_form(c["kind"], form)
+        label = str(form.get("label", "")).strip()
+        if c["kind"] == "commute":
+            target = _commute_target(store, target)
+            auto_before = _commute_label(store, c["target"]) or c["label"]
+            if not label or label == auto_before:  # a name they never changed follows the new place, way and minutes
+                label = _commute_label(store, target)
+        store.update_criterion(criterion_id, label=label, weight=form.get("weight") or 0,
+                               dealbreaker=form.get("dealbreaker") == "1", target=target)
     except NotFound:
-        raise HTTPException(404, "That criterion doesn't exist.") from None
+        raise HTTPException(404, "That item doesn't exist.") from None
     except ValueError as exc:
         return redirect(f"/search?id={c['search_id']}#criteria", error=str(exc))
     return redirect(f"/search?id={c['search_id']}#criteria", notice="Saved.")
@@ -401,46 +467,70 @@ def delete_criterion(request: Request, criterion_id: int):
     try:
         c = store.get_criterion(criterion_id)
     except NotFound:
-        raise HTTPException(404, "That criterion doesn't exist.") from None
+        raise HTTPException(404, "That item doesn't exist.") from None
     store.delete_criterion(criterion_id)
     return redirect(f"/search?id={c['search_id']}#criteria", notice="Removed.")
+
+
+def _anchors_back(form: Any) -> str:
+    sid = str(form.get("search_id") or "")
+    return f"/search?id={sid}#anchors" if sid.isdigit() else "/search#anchors"
+
+
+NO_LOCATION_NOTE = "Commutes need a location. Press Find on map from address next to it, or enter coordinates yourself."
 
 
 @router.post("/anchors", include_in_schema=False)
 async def add_anchor(request: Request):
     store = get_store(request)
     form = await request.form()
-    back = f"/search?id={form.get('search_id')}#anchors" if form.get("search_id") else "/search#anchors"
+    back = _anchors_back(form)
     try:
-        store.add_anchor(str(form.get("name", "")), str(form.get("address", "")), form.get("lat"), form.get("lng"))
+        name = str(form.get("name", "")).strip()
+        dupe = any(a["name"].strip().lower() == name.lower() for a in store.list_anchors()) if name else False
+        a = store.add_anchor(name, str(form.get("address", "")), form.get("lat"), form.get("lng"))
     except ValueError as exc:
         return redirect(back, error=str(exc))
-    return redirect(back, notice="Added.")
+    if form.get("find") == "1":
+        return lookup_for_anchor(request, store, a, search_id=str(form.get("search_id") or ""))
+    note = f"Added {a['name']}."
+    if dupe:
+        note += " Heads up: you already had one with that name."
+    if a["lat"] is None or a["lng"] is None:
+        note += " " + NO_LOCATION_NOTE
+    return redirect(back, notice=note)
 
 
 @router.post("/anchors/{anchor_id}", include_in_schema=False)
 async def update_anchor(request: Request, anchor_id: int):
     store = get_store(request)
     form = await request.form()
-    back = f"/search?id={form.get('search_id')}#anchors" if form.get("search_id") else "/search#anchors"
+    back = _anchors_back(form)
     try:
-        store.update_anchor(anchor_id, name=form.get("name", ""), address=form.get("address", ""), lat=form.get("lat"), lng=form.get("lng"))
+        name = str(form.get("name", "")).strip()
+        dupe = any(o["id"] != anchor_id and o["name"].strip().lower() == name.lower() for o in store.list_anchors()) if name else False
+        a = store.update_anchor(anchor_id, name=name, address=form.get("address", ""), lat=form.get("lat"), lng=form.get("lng"))
     except NotFound:
-        raise HTTPException(404, "That anchor doesn't exist.") from None
+        raise HTTPException(404, "That important place doesn't exist.") from None
     except ValueError as exc:
         return redirect(back, error=str(exc))
-    return redirect(back, notice="Saved.")
+    note = "Saved."
+    if dupe:
+        note += " Heads up: you have another one with that name."
+    if a["lat"] is None or a["lng"] is None:
+        note += " " + NO_LOCATION_NOTE
+    return redirect(back, notice=note)
 
 
 @router.post("/anchors/{anchor_id}/delete", include_in_schema=False)
 async def delete_anchor(request: Request, anchor_id: int):
     store = get_store(request)
     form = await request.form()
-    back = f"/search?id={form.get('search_id')}#anchors" if form.get("search_id") else "/search#anchors"
+    back = _anchors_back(form)
     try:
         store.delete_anchor(anchor_id)
     except NotFound:
-        raise HTTPException(404, "That anchor doesn't exist.") from None
+        raise HTTPException(404, "That important place doesn't exist.") from None
     return redirect(back, notice="Removed. Commute times saved for it are gone too.")
 
 

@@ -93,8 +93,8 @@ def test_tiles_on_and_off(client, sample_store):
     assert "Map pictures are off" in off and "Show map pictures" in off
 
 
-def test_find_on_map_button_only_when_geocode_is_on(client, sample_store):
-    assert "/geocode" not in client.get("/map").text
+def test_find_on_map_button_is_always_shown(client, sample_store):
+    assert "/geocode" in client.get("/map").text  # lookup stays opt-in, but the button is always there
     sample_store.set_setting("geocode", "1")
     html = client.get("/map").text
     elm = next(p for p in sample_store.list_places() if p["title"] == "The Elm Street House")

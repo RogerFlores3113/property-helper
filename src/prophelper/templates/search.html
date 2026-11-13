@@ -2,7 +2,8 @@
 {% from "_macros.html" import page_head, button, post_button, field, select, check, sample_notice, sample_badge, empty_state %}
 {% block title %}Search &middot; Property Helper{% endblock %}
 {% block body %}
-{% call page_head("Search", "What you are looking for. Every place is scored against it.") %}{% endcall %}
+<link rel="stylesheet" href="/static/search.css">
+{% call page_head("Search", "What you are looking for. Every place is checked against it.") %}{% endcall %}
 {{ sample_notice() }}
 
 <section class="card" id="searches">
@@ -57,7 +58,7 @@
     </div>
     {{ field("Notes", "notes", shown.notes, kind="textarea", rows=3) }}
     <input type="hidden" name="hide_dealbreakers" value="0">
-    {{ check("Hide places that fail a deal-breaker from the board (a link shows them again)", "hide_dealbreakers", shown.hide_dealbreakers) }}
+    {{ check("Hide places that fail a must have from the board (a link shows them again)", "hide_dealbreakers", shown.hide_dealbreakers) }}
     <p>{{ button("Save search", kind="primary") }}</p>
   </form>
   {% if shown.mode == 'buy' %}<p class="fine">Buying estimates use the down payment, rate and loan length in <a href="/settings#map">Settings</a>.</p>{% endif %}
@@ -65,53 +66,63 @@
 
 <section class="card" id="criteria">
   <h2>What matters to you</h2>
-  <p class="fine">Each criterion has a weight (how much it counts). Tick "Deal-breaker" for a must-have: places that fail it are hidden from the board.</p>
+  <p class="fine">Each item has "How much it matters" (0 to 100, higher counts more). Tick "Must have" when a place that fails it just doesn't fit: those places are hidden from the board.</p>
   {% if criteria %}
   {% for c in criteria %}
   <form method="post" action="/criteria/{{ c.id }}" class="crit-form">
-    <div class="field"><label for="cl-{{ c.id }}">{{ KIND_LABELS.get(c.kind, c.kind) }}</label><input id="cl-{{ c.id }}" name="label" type="text" value="{{ c.label }}"></div>
+    <div class="field"><label for="cl-{{ c.id }}">Name ({{ KIND_LABELS.get(c.kind, c.kind) }})</label><input id="cl-{{ c.id }}" name="label" type="text" value="{{ c.label }}" placeholder="{{ crit_labels.get(c.id, '') }}"></div>
     {% set kind = c.kind %}{% set t = c.target %}{% set pre = 'c' ~ c.id %}{% include "_criterion_target.html" %}
-    <div class="field"><label for="cw-{{ c.id }}">Weight</label><input id="cw-{{ c.id }}" name="weight" type="number" min="0" max="100" step="1" value="{{ c.weight|round|int }}" style="width:5rem"></div>
-    <div class="checks"><input id="cd-{{ c.id }}" type="checkbox" name="dealbreaker" value="1"{% if c.dealbreaker %} checked{% endif %}><label for="cd-{{ c.id }}">Deal-breaker</label></div>
+    <div class="field"><label for="cw-{{ c.id }}">How much it matters</label><input id="cw-{{ c.id }}" name="weight" type="number" min="0" max="100" step="1" value="{{ c.weight|round|int }}" style="width:5rem"></div>
+    <div class="checks"><input id="cd-{{ c.id }}" type="checkbox" name="dealbreaker" value="1"{% if c.dealbreaker %} checked{% endif %}><label for="cd-{{ c.id }}">Must have</label></div>
     {{ button("Save", small=True) }}
     <button class="btn danger small" type="submit" formaction="/criteria/{{ c.id }}/delete" formnovalidate>Remove</button>
   </form>
   {% endfor %}
-  {% else %}<p>No criteria yet. Add a few below, such as a most-per-month price and a commute.</p>{% endif %}
+  <p class="fine">Leave a name empty and a plain one is made for you.</p>
+  {% else %}<p>Nothing here yet. Add a few things below, such as a most-per-month price and a commute.</p>{% endif %}
 
-  <h3>Add a criterion</h3>
-  <form method="post" action="/search/{{ shown.id }}/criteria" class="stack">
+  <h3>Add something that matters</h3>
+  <form method="post" action="/search/{{ shown.id }}/criteria" class="stack" data-kind-form>
     <div class="field"><label for="nc-kind">What kind</label>
-      <select id="nc-kind" name="kind">{% for k in CRITERION_KINDS %}<option value="{{ k }}">{{ KIND_LABELS.get(k, k) }}</option>{% endfor %}</select></div>
-    <div class="field"><label for="nc-label">Label (optional)</label><input id="nc-label" name="label" type="text" placeholder="Left empty, a plain label is made for you"></div>
+      <select id="nc-kind" name="kind" data-kind-select>{% for k in CRITERION_KINDS %}<option value="{{ k }}">{{ KIND_LABELS.get(k, k) }}</option>{% endfor %}</select></div>
+    <div class="field"><label for="nc-label">Name (optional)</label><input id="nc-label" name="label" type="text" placeholder="Left empty, a plain name is made for you"></div>
     <div class="crit-form">
-      <div class="field"><label for="nc-max">Price: most per month</label><input id="nc-max" name="t_max" type="number" step="any"></div>
-      <div class="field"><label for="nc-min">Bedrooms, bathrooms or size: at least</label><input id="nc-min" name="t_min" type="number" step="any"></div>
-      <div class="field"><label for="nc-anchor">Commute: to</label><select id="nc-anchor" name="t_anchor_id"><option value="">First anchor</option>{% for a in anchors %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}</select></div>
-      <div class="field"><label for="nc-mode">Commute: by</label><select id="nc-mode" name="t_mode">{% for m in COMMUTE_MODES %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
-      <div class="field"><label for="nc-minutes">Commute: minutes or less</label><input id="nc-minutes" name="t_minutes" type="number" step="1"></div>
-      <div class="field"><label for="nc-want">Laundry, parking or pets: want</label>
-        <select id="nc-want" name="t_want"><option value="">Default</option><option value="in_unit">Laundry in the unit</option><option value="in_building">Laundry in the building</option><option value="garage">Garage</option><option value="covered">Covered parking</option><option value="lot">A lot</option><option value="cats">Cats</option><option value="dogs">Dogs</option><option value="both">Cats and dogs</option></select></div>
-      <div class="field"><label for="nc-year">Newer: built in or after</label><input id="nc-year" name="t_year" type="number" step="1"></div>
+      <div class="field" data-kinds="price"><label for="nc-max">Price: most per month</label><input id="nc-max" name="t_max" type="number" step="any"></div>
+      <div class="field" data-kinds="beds baths sqft"><label for="nc-min">Bedrooms, bathrooms or size: at least</label><input id="nc-min" name="t_min" type="number" step="any"></div>
+      <div class="field" data-kinds="commute"><label for="nc-anchor">Commute: to</label><select id="nc-anchor" name="t_anchor_id"><option value="">The first important place</option>{% for a in anchors %}<option value="{{ a.id }}">{{ a.name }}</option>{% endfor %}</select></div>
+      <div class="field" data-kinds="commute"><label for="nc-mode">Commute: by</label><select id="nc-mode" name="t_mode">{% for m in COMMUTE_MODES %}<option value="{{ m }}">{{ m }}</option>{% endfor %}</select></div>
+      <div class="field" data-kinds="commute"><label for="nc-minutes">Commute: minutes or less</label><input id="nc-minutes" name="t_minutes" type="number" step="1"></div>
+      <div class="field" data-kinds="laundry"><label for="nc-want-laundry">Laundry: you want</label>
+        <select id="nc-want-laundry" name="t_want_laundry"><option value="in_unit">In the unit</option><option value="in_building">In the building is fine</option></select></div>
+      <div class="field" data-kinds="parking"><label for="nc-want-parking">Parking: you want</label>
+        <select id="nc-want-parking" name="t_want_parking">{% for p in ('garage', 'covered', 'lot', 'street') %}<option value="{{ p }}">{{ p|capitalize }} or better</option>{% endfor %}</select></div>
+      <div class="field" data-kinds="pets"><label for="nc-want-pets">Pets: you have</label>
+        <select id="nc-want-pets" name="t_want_pets"><option value="">Any pets</option><option value="cats">Cats</option><option value="dogs">Dogs</option><option value="both">Cats and dogs</option></select></div>
+      <div class="field" data-kinds="newer"><label for="nc-year">Newer: built in or after</label><input id="nc-year" name="t_year" type="number" step="1"></div>
+      <p class="fine" data-kinds="dishwasher custom">Nothing more to choose for this one. (Your own score: you give each place a score from 0 to 5 on its page.)</p>
     </div>
     <div class="crit-form">
-      <div class="field"><label for="nc-weight">Weight (0 to 100)</label><input id="nc-weight" name="weight" type="number" min="0" max="100" value="10" style="width:5rem"></div>
-      <div class="checks"><input id="nc-deal" type="checkbox" name="dealbreaker" value="1"><label for="nc-deal">Deal-breaker</label></div>
+      <div class="field"><label for="nc-weight">How much it matters (0 to 100)</label><input id="nc-weight" name="weight" type="number" min="0" max="100" value="10" style="width:5rem"></div>
+      <div class="checks"><input id="nc-deal" type="checkbox" name="dealbreaker" value="1"><label for="nc-deal">Must have (a place that fails it doesn't fit)</label></div>
     </div>
-    <p>{{ button("Add this criterion", kind="primary") }}</p>
+    <p>{{ button("Add this", kind="primary") }}</p>
   </form>
 </section>
 
 <section class="card" id="anchors">
-  <h2>Places you travel to</h2>
-  <p class="fine">Work, school, a gym. Commute times are measured to these. Latitude and longitude let the app estimate the commute (you can type your own minutes on any place).</p>
+  <h2>Important places</h2>
+  <p class="fine">Work, school, a gym: the places you go often. Commute times are worked out to these. A commute needs a location, so press "Find on map from address" (it sends only the address to OpenStreetMap's free lookup service, and asks you first if lookup is off). You can also type your own minutes on any place.</p>
   {% for a in anchors %}
-  <form method="post" action="/anchors/{{ a.id }}" class="crit-form">
+  <form method="post" action="/anchors/{{ a.id }}" class="crit-form" id="anchor-{{ a.id }}">
     <input type="hidden" name="search_id" value="{{ shown.id }}">
     <div class="field"><label for="an-{{ a.id }}">Name</label><input id="an-{{ a.id }}" name="name" type="text" value="{{ a.name }}"></div>
     <div class="field"><label for="aa-{{ a.id }}">Address</label><input id="aa-{{ a.id }}" name="address" type="text" value="{{ a.address }}"></div>
-    <div class="field"><label for="al-{{ a.id }}">Latitude</label><input id="al-{{ a.id }}" name="lat" type="number" step="any" value="{{ a.lat if a.lat is not none else '' }}" style="width:8rem"></div>
-    <div class="field"><label for="ag-{{ a.id }}">Longitude</label><input id="ag-{{ a.id }}" name="lng" type="number" step="any" value="{{ a.lng if a.lng is not none else '' }}" style="width:8rem"></div>
+    <div class="field"><span class="fine">{% if a.lat is not none and a.lng is not none %}Location saved ({{ a.lat }}, {{ a.lng }}){% else %}<strong>No location yet</strong>, so no commute can be worked out{% endif %}</span>
+      <button class="btn small" type="submit" formaction="/anchors/{{ a.id }}/geocode" formnovalidate>Find on map from address</button></div>
+    <details class="coords"{% if a.lat is none or a.lng is none %} data-closed{% endif %}><summary>Enter coordinates yourself</summary>
+      <div class="field"><label for="al-{{ a.id }}">Latitude</label><input id="al-{{ a.id }}" name="lat" type="number" step="any" value="{{ a.lat if a.lat is not none else '' }}" style="width:8rem"></div>
+      <div class="field"><label for="ag-{{ a.id }}">Longitude</label><input id="ag-{{ a.id }}" name="lng" type="number" step="any" value="{{ a.lng if a.lng is not none else '' }}" style="width:8rem"></div>
+    </details>
     {{ button("Save", small=True) }}
     <button class="btn danger small" type="submit" formaction="/anchors/{{ a.id }}/delete" formnovalidate>Remove</button>
   </form>
@@ -121,9 +132,12 @@
     <input type="hidden" name="search_id" value="{{ shown.id }}">
     <div class="field"><label for="na-name">Name</label><input id="na-name" name="name" type="text" required placeholder="Work"></div>
     <div class="field"><label for="na-addr">Address</label><input id="na-addr" name="address" type="text"></div>
-    <div class="field"><label for="na-lat">Latitude</label><input id="na-lat" name="lat" type="number" step="any" style="width:8rem"></div>
-    <div class="field"><label for="na-lng">Longitude</label><input id="na-lng" name="lng" type="number" step="any" style="width:8rem"></div>
+    <details class="coords"><summary>Enter coordinates yourself</summary>
+      <div class="field"><label for="na-lat">Latitude</label><input id="na-lat" name="lat" type="number" step="any" style="width:8rem"></div>
+      <div class="field"><label for="na-lng">Longitude</label><input id="na-lng" name="lng" type="number" step="any" style="width:8rem"></div>
+    </details>
     {{ button("Add", kind="primary", small=True) }}
+    <button class="btn small" type="submit" name="find" value="1">Add and find on map from address</button>
   </form>
 </section>
 
@@ -140,3 +154,4 @@
 </section>
 {% endif %}
 {% endblock %}
+{% block scripts %}<script src="/static/search.js" defer></script>{% endblock %}
