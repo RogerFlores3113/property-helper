@@ -45,7 +45,7 @@ TOUR_STATES: tuple[str, ...] = ("ok", "issue", "")
 DOCUMENT_KINDS: tuple[str, ...] = ("lease", "application", "disclosure", "inspection", "photo", "other")
 DRAFT_KINDS: tuple[str, ...] = ("fit score", "red flags", "tour questions", "message")
 CRITERION_KINDS: tuple[str, ...] = ("price", "beds", "baths", "sqft", "commute", "laundry", "dishwasher", "parking",
-                                    "pets", "newer", "custom")
+                                    "pets", "fenced_yard", "newer", "custom")
 LAUNDRY_VALUES = ("in_unit", "in_building", "hookups", "none")
 PARKING_VALUES = ("garage", "covered", "lot", "street", "none")
 PETS_VALUES = ("cats", "dogs", "both", "none")
@@ -82,18 +82,18 @@ UPLOAD_LIMIT_BYTES = 20 * 1024 * 1024
 
 PLACE_TEXT = ("title", "address", "unit", "city", "state", "zip", "url", "source", "listing_text", "laundry", "parking",
               "pets", "utilities_included", "available_from", "lease_start", "lease_end", "notes", "ai_notes",
-              "fit_notes", "red_flags")
-PLACE_REAL = ("lat", "lng", "price", "beds", "baths", "parking_cost", "pet_rent", "pet_fee", "utilities_estimate",
+              "fit_notes", "red_flags", "pet_breed_note")
+PLACE_REAL = ("lat", "lng", "price", "beds", "baths", "parking_cost", "pet_rent", "pet_fee", "utilities_estimate", "pet_weight_limit", "pet_deposit",
               "deposit", "application_fee", "other_monthly_fees", "move_in_fees", "broker_fee", "hoa", "property_tax",
               "insurance")
-PLACE_INT = ("sqft", "year_built", "lease_months", "rating", "fit_score")
+PLACE_INT = ("sqft", "year_built", "lease_months", "rating", "fit_score", "pet_count_limit")
 PLACE_DATES = ("available_from", "lease_start", "lease_end")
-PLACE_FIELDS: tuple[str, ...] = (PLACE_TEXT + PLACE_REAL + PLACE_INT + ("photo_urls", "dishwasher", "hidden", "is_sample"))
+PLACE_FIELDS: tuple[str, ...] = (PLACE_TEXT + PLACE_REAL + PLACE_INT + ("photo_urls", "dishwasher", "fenced_yard", "hidden", "is_sample"))
 # What a form or the AI may set (stage goes through move_stage).
 PLACE_EDITABLE: tuple[str, ...] = tuple(f for f in PLACE_FIELDS if f not in ("is_sample",))
 TEXT_LIMITS = {"title": 300, "address": 300, "unit": 40, "city": 120, "state": 60, "zip": 20, "url": 2000, "source": 120,
                "listing_text": 200_000, "utilities_included": 300, "notes": 50_000, "ai_notes": 50_000,
-               "fit_notes": 20_000, "red_flags": 5_000, "laundry": 20, "parking": 20, "pets": 20}
+               "fit_notes": 20_000, "red_flags": 5_000, "laundry": 20, "parking": 20, "pets": 20, "pet_breed_note": 300}
 PHOTOS_MAX = 30
 AI_PROTECTED = ("notes", "rating", "hidden", "is_sample")  # fields an AI update never writes
 AI_EVENT_TEXT_MAX = 2000
@@ -308,7 +308,25 @@ CREATE INDEX IF NOT EXISTS idx_place_dates_place ON place_dates(place_id, date);
 # How many people share the cost of a place (rent split, or a household buying). One self-contained step.
 _MIGRATION_PEOPLE = "ALTER TABLE searches ADD COLUMN people INTEGER NOT NULL DEFAULT 1;"
 
-_MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2_PLACE_DATES, _MIGRATION_PEOPLE]
+# Pet limits on places, "your pets" on searches, and the per-place application checklist. One self-contained step.
+_MIGRATION_PETS_APPLY = """
+ALTER TABLE places ADD COLUMN pet_weight_limit REAL;
+ALTER TABLE places ADD COLUMN pet_count_limit INTEGER;
+ALTER TABLE places ADD COLUMN pet_breed_note TEXT NOT NULL DEFAULT '';
+ALTER TABLE places ADD COLUMN pet_deposit REAL;
+ALTER TABLE places ADD COLUMN fenced_yard INTEGER;
+ALTER TABLE searches ADD COLUMN pet_kind TEXT NOT NULL DEFAULT '';
+ALTER TABLE searches ADD COLUMN pet_weight REAL;
+ALTER TABLE searches ADD COLUMN pet_count INTEGER;
+CREATE TABLE IF NOT EXISTS place_checklist (
+    place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+    item_id INTEGER NOT NULL REFERENCES checklist_items(id) ON DELETE CASCADE,
+    done_at TEXT NOT NULL,
+    PRIMARY KEY (place_id, item_id)
+);
+"""
+
+_MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2_PLACE_DATES, _MIGRATION_PEOPLE, _MIGRATION_PETS_APPLY]
 
 
 class NotFound(LookupError):
@@ -909,6 +927,21 @@ class Store:
             if n != int(n) or not 1 <= n <= MAX_PEOPLE:
                 raise ValueError(f"People sharing the cost is a whole number from 1 to {MAX_PEOPLE}.")
             out["people"] = int(n)
+        if "pet_kind" in fields:
+            kind = _text(fields["pet_kind"], 10).lower()
+            if kind not in ("", "cat", "dog", "both"):
+                raise ValueError("Your pets are cat, dog, both, or none.")
+            out["pet_kind"] = kind
+        if "pet_weight" in fields:
+            n = to_number(fields["pet_weight"], "your dog's weight")
+            if n is not None and not 0 < n <= 300:
+                raise ValueError("Your dog's weight is in pounds, from 1 to 300.")
+            out["pet_weight"] = n
+        if "pet_count" in fields:
+            n = to_number(fields["pet_count"], "the number of pets")
+            if n is not None and (n != int(n) or not 1 <= n <= 20):
+                raise ValueError("The number of pets is a whole number from 1 to 20.")
+            out["pet_count"] = None if n is None else int(n)
         if "is_sample" in fields:
             out["is_sample"] = 1 if fields["is_sample"] else 0
         return out
@@ -1150,6 +1183,8 @@ class Store:
             out["photo_urls"] = json.dumps(photo_list(fields["photo_urls"]))
         if "dishwasher" in fields:
             out["dishwasher"] = clean_bool(fields["dishwasher"])
+        if "fenced_yard" in fields:
+            out["fenced_yard"] = clean_bool(fields["fenced_yard"])
         if "hidden" in fields:
             out["hidden"] = 1 if clean_bool(fields["hidden"]) else 0
         if "is_sample" in fields:
@@ -2022,6 +2057,40 @@ class Store:
         self.get_checklist_item(item_id)
         self._exec("DELETE FROM checklist_items WHERE id = ?", (item_id,))
         return True
+
+    # ------------------------------------------------------------------ per-place application checklist
+    def place_checklist(self, place_id: int) -> list[dict[str, Any]]:
+        """The global checklist items with ``done_here`` (ticked for this place) and ``done_at``."""
+        self._require_place(place_id)
+        rows = self._rows("SELECT c.*, pc.done_at AS done_at FROM checklist_items c LEFT JOIN place_checklist pc "
+                          "ON pc.item_id = c.id AND pc.place_id = ? ORDER BY c.sort_order, c.id", (place_id,))
+        for r in rows:
+            r["done_here"] = bool(r["done_at"])
+        return rows
+
+    def set_place_checklist(self, place_id: int, item_id: int, done: Any) -> None:
+        """Tick or untick one checklist item for one place."""
+        self._require_place(place_id)
+        self.get_checklist_item(item_id)
+        if clean_bool(done):
+            self._exec("INSERT INTO place_checklist(place_id, item_id, done_at) VALUES (?, ?, ?) "
+                       "ON CONFLICT(place_id, item_id) DO NOTHING", (place_id, item_id, now_iso()))
+        else:
+            self._exec("DELETE FROM place_checklist WHERE place_id = ? AND item_id = ?", (place_id, item_id))
+
+    def application_deadline(self, place_id: int) -> dict[str, Any] | None:
+        """The key date of kind application_deadline to show: the next one from today, else the latest one that passed."""
+        rows = [r for r in self.list_place_dates(place_id) if r["kind"] == "application_deadline"]
+        if not rows:
+            return None
+        today = date.today().isoformat()
+        return next((r for r in rows if r["date"] >= today), rows[-1])
+
+    def place_checklist_left(self, place_id: int) -> int:
+        """How many checklist items are not ticked yet for this place."""
+        row = self._row("SELECT COUNT(*) AS n FROM checklist_items c WHERE NOT EXISTS (SELECT 1 FROM place_checklist pc "
+                        "WHERE pc.item_id = c.id AND pc.place_id = ?)", (place_id,))
+        return int(row["n"]) if row else 0
 
     # ------------------------------------------------------------------ AI drafts
     def add_draft(self, place_id: int, kind: str, body: str, model: str = "") -> dict[str, Any]:

@@ -2,7 +2,8 @@
 
 ``parse_listing(text, url)`` returns a dict of field -> value for the fields it could find. Keys are the same as the
 place fields (``price``, ``beds``, ``baths``, ``sqft``, ``address``, ``unit``, ``city``, ``state``, ``zip``, ``laundry``,
-``dishwasher``, ``parking``, ``parking_cost``, ``pets``, ``pet_rent``, ``pet_fee``, ``utilities_included``,
+``dishwasher``, ``parking``, ``parking_cost``, ``pets``, ``pet_rent``, ``pet_fee``, ``pet_deposit`` (refundable), ``pet_weight_limit``, ``pet_count_limit``,
+``pet_breed_note``, ``fenced_yard``, ``utilities_included``,
 ``available_from``, ``lease_months``, ``deposit``, ``application_fee``, ``move_in_fees``, ``other_monthly_fees``,
 ``year_built``, ``hoa``, ``property_tax``, ``insurance``, ``source``, ``title``), plus ``found_in_listing``: a short plain
 summary of facts with no field of their own (pet weight limits, a special assessment, per-adult fees). A missing key means "not found", never a guess.
@@ -401,6 +402,47 @@ def _pet_fees(text: str) -> dict[str, float]:
         if m:
             one_time = re.search(r"one[- ]time|deposit|non[- ]?refundable|once", m.group(2), re.I)
             out["pet_fee" if one_time else "pet_rent"] = float(m.group(1))
+    return out
+
+_NUM_WORDS = {"one": 1, "two": 2, "three": 3, "four": 4}
+
+
+def _pet_deposit(text: str) -> tuple[float | None, str]:
+    """A refundable pet deposit ("$400 refundable pet deposit"), kept apart from the one-time pet fee: it comes back,
+    so it counts only as cash needed at move-in. Returns (amount, text with that phrase blanked so _pet_fees skips it)."""
+    pats = (r"\$\s?(\d{1,4})(?:\.\d\d)?[ \t]*(?<!non-)(?<!non )\brefundable[ \t]+pet[ \t]+deposit",
+            r"\bpet[ \t]+deposit[ \t]*[:\-]?[ \t]*\$\s?(\d{1,4})(?:\.\d\d)?[ \t]*\(?(?<!non-)(?<!non )\brefundable")
+    for pat in pats:
+        m = re.search(pat, text, re.I)
+        if m:
+            return float(m.group(1)), text[:m.start()] + " " * (m.end() - m.start()) + text[m.end():]
+    return None, text
+
+
+def _pet_limit_fields(text: str) -> dict[str, Any]:
+    """Structured pet limits: pet_weight_limit (lb), pet_count_limit, pet_breed_note and fenced_yard (1 or 0)."""
+    out: dict[str, Any] = {}
+    w = re.search(r"\b(?:dogs?|pets?|animals?)\b[^.\n;]{0,40}?(?:under|up to|less than|below|at most|max(?:imum)?(?: of)?|weigh(?:ing|s)?(?: up to| under)?|<)\s*(\d{1,3})\s*(?:lbs?\b|pounds?\b)", text, re.I) \
+        or re.search(r"\b(\d{1,3})\s*(?:lbs?\b|pounds?\b)\s*(?:weight\s*)?(?:limit|max(?:imum)?)", text, re.I) \
+        or re.search(r"\bweight (?:limit|max(?:imum)?)\s*(?:of|is|:)?\s*(\d{1,3})\s*(?:lbs?\b|pounds?\b)?", text, re.I)
+    if w and 3 <= int(w.group(1)) <= 300:
+        out["pet_weight_limit"] = float(w.group(1))
+    n = re.search(r"\b(?:max(?:imum)?(?: of)?|limit(?: of)?|up to|no more than|at most)\s+(\d|one|two|three|four)\s+(?:pets?|animals?)\b", text, re.I) \
+        or re.search(r"\b(\d|one|two|three|four)\s+(?:pets?|animals?)\s+(?:max(?:imum)?|limit|per (?:unit|apartment|home|household))", text, re.I)
+    if n:
+        v = n.group(1).lower()
+        count = int(v) if v.isdigit() else _NUM_WORDS[v]
+        if count >= 1:
+            out["pet_count_limit"] = count
+    b = re.search(r"[^.\n;]*\b(?:breed|breeds|breed restrictions?)\b[^.\n;]*", text, re.I)
+    if b:
+        clause = " ".join(b.group(0).split()).strip(" -:,")
+        if 0 < len(clause) <= 140:
+            out["pet_breed_note"] = clause[0].upper() + clause[1:]
+    if re.search(r"\b(?:no|not a|without a)\s+fenced\b|\bunfenced\b|\bnot fenced\b", text, re.I):
+        out["fenced_yard"] = 0
+    elif re.search(r"\bfenced[- ](?:in[- ])?(?:back|front|private )?(?:yard|garden|lot|patio)|\b(?:yard|backyard)\s+(?:is\s+)?(?:fully\s+)?fenced|\bfully fenced\b", text, re.I):
+        out["fenced_yard"] = 1
     return out
 
 
@@ -821,7 +863,11 @@ def parse_listing(text: str = "", url: str = "") -> dict[str, Any]:
     put("parking", kind_cost[0])
     put("parking_cost", kind_cost[1])
     put("pets", _try(lambda: _pets(text)))
-    for key, value in (_try(lambda: _pet_fees(text)) or {}).items():
+    deposit_amount, fee_text = _try(lambda: _pet_deposit(text)) or (None, text)
+    put("pet_deposit", deposit_amount)
+    for key, value in (_try(lambda: _pet_fees(fee_text)) or {}).items():
+        put(key, value)
+    for key, value in (_try(lambda: _pet_limit_fields(text)) or {}).items():
         put(key, value)
     put("utilities_included", _try(lambda: _utilities(text)))
     pays = _try(lambda: _tenant_pays(text))

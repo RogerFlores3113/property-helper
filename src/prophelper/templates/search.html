@@ -56,6 +56,11 @@
       {{ field("Move in by", "move_in", shown.move_in or '', kind="date") }}
       {{ field("Target close date", "target_close", shown.target_close or '', kind="date") }}
       {{ field("People sharing the cost", "people", shown.people or 1, kind="number", step="1", hint="Rent or payment split between this many people. Place pages, the board and Compare then show a per-person cost.") }}
+      {% if shown.mode != 'buy' %}
+      {{ select("Your pets", "pet_kind", [("cat", "A cat"), ("dog", "A dog"), ("both", "Cats and dogs")], shown.pet_kind or '', blank="No pets") }}
+      {{ field("How heavy your dog is (lb)", "pet_weight", shown.pet_weight if shown.pet_weight is not none else '', kind="number", step="any", hint="A place that only allows smaller dogs then shows as not fitting your pets.") }}
+      {{ field("How many pets", "pet_count", shown.pet_count if shown.pet_count is not none else '', kind="number", step="1") }}
+      {% endif %}
     </div>
     {{ field("Notes", "notes", shown.notes, kind="textarea", rows=3) }}
     <input type="hidden" name="hide_dealbreakers" value="0">
@@ -100,7 +105,7 @@
       <div class="field" data-kinds="pets"><label for="nc-want-pets">Pets: you have</label>
         <select id="nc-want-pets" name="t_want_pets"><option value="">Any pets</option><option value="cats">Cats</option><option value="dogs">Dogs</option><option value="both">Cats and dogs</option></select></div>
       <div class="field" data-kinds="newer"><label for="nc-year">Newer: built in or after</label><input id="nc-year" name="t_year" type="number" step="1"></div>
-      <p class="fine" data-kinds="dishwasher custom">Nothing more to choose for this one. (Your own score: you give each place a score from 0 to 5 on its page.)</p>
+      <p class="fine" data-kinds="dishwasher fenced_yard custom">Nothing more to choose for this one. (Your own score: you give each place a score from 0 to 5 on its page.)</p>
     </div>
     <div class="crit-form">
       <div class="field"><label for="nc-weight">How much it matters (0 to 100)</label><input id="nc-weight" name="weight" type="number" min="0" max="100" value="10" style="width:5rem"></div>

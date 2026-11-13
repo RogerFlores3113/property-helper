@@ -22,10 +22,10 @@ from . import commute as commute_mod
 from . import money, redflags
 
 KINDS: tuple[str, ...] = ("price", "beds", "baths", "sqft", "commute", "laundry", "dishwasher", "parking", "pets",
-                          "newer", "custom")
+                          "fenced_yard", "newer", "custom")
 KIND_LABELS: dict[str, str] = {
     "price": "Monthly cost", "beds": "Bedrooms", "baths": "Bathrooms", "sqft": "Size", "commute": "Commute",
-    "laundry": "Laundry", "dishwasher": "Dishwasher", "parking": "Parking", "pets": "Pets", "newer": "Newer building",
+    "laundry": "Laundry", "dishwasher": "Dishwasher", "parking": "Parking", "pets": "Pets", "fenced_yard": "Fenced yard", "newer": "Newer building",
     "custom": "Your own score",
 }
 UNKNOWN_SCORE = 0.5
@@ -71,6 +71,8 @@ def default_label(kind: str, target: dict[str, Any] | None = None, mode: str = "
         return f"Commute{where} by {mode}, {_fmt(mins, '', ' min')} or less" if mins else f"Commute{where}"
     if kind == "laundry":
         return "Washer and dryer in the unit" if (t.get("want") or "in_unit") == "in_unit" else "Laundry in the building"
+    if kind == "fenced_yard":
+        return "Fenced yard"
     if kind == "newer":
         return f"Built {t['year']} or later" if t.get("year") else KIND_LABELS[kind]
     return KIND_LABELS.get(kind, kind.title())
@@ -204,14 +206,51 @@ def _score_parking(c: dict[str, Any], place: dict[str, Any]) -> dict[str, Any]:
     return _score_yes(True, ok, target, have, "Parking")
 
 
-def _score_pets(c: dict[str, Any], place: dict[str, Any]) -> dict[str, Any]:
-    want = c["target"].get("want") or ""
+_PROFILE_WANT = {"cat": "cats", "dog": "dogs", "both": "both"}
+
+
+def _score_pets(c: dict[str, Any], place: dict[str, Any], ctx: dict[str, Any] | None = None) -> dict[str, Any]:
+    """The pet policy, then (when the search says what pets you have) the place's weight and count limits."""
+    profile = (ctx or {}).get("pets") or {}
+    kind = profile.get("kind") or ""
+    want = c["target"].get("want") or _PROFILE_WANT.get(kind, "")
     have = str(place.get("pets") or "")
     target = f"{want} allowed" if want else "pets allowed"
     if have not in ("cats", "dogs", "both", "none"):
         return _unknown(target, "The pet policy")
     ok = have in PETS_OK.get(want, ("cats", "dogs", "both"))
-    return _score_yes(True, ok, target, have if have != "none" else "no pets", "The pet policy")
+    value = have if have != "none" else "no pets"
+    if not ok or not kind:
+        return _score_yes(True, ok, target, value, "The pet policy")
+    has_dog = kind in ("dog", "both")
+    weight, count = _num(profile.get("weight")), _num(profile.get("count"))
+    w_limit, c_limit = _num(place.get("pet_weight_limit")), _num(place.get("pet_count_limit"))
+    problems: list[str] = []
+    unknown: list[str] = []
+    if has_dog and weight:
+        if w_limit is None:
+            unknown.append("weight limit")
+        elif weight > w_limit:
+            problems.append(f"Your dog is {_fmt(weight)} lb; limit {_fmt(w_limit)} lb")
+    if count:
+        if c_limit is None:
+            if count > 1:  # one pet is nearly always fine, so only more than one needs the limit
+                unknown.append("number of pets allowed")
+        elif count > c_limit:
+            problems.append(f"You have {_fmt(count)} pets; limit {_fmt(c_limit)}")
+    if problems:
+        return _result(0.0, value, target, "; ".join(problems) + ".", known=True, passes=False, gap="; ".join(problems))
+    if unknown:
+        return _result(None, value, target, "The " + " and the ".join(unknown) + " is not filled in, so it counts as a maybe.",
+                       known=False, passes=None)
+    limits = ([f"limit {_fmt(w_limit)} lb"] if has_dog and weight and w_limit is not None else []) \
+        + ([f"up to {_fmt(c_limit)} pets"] if count and c_limit is not None else [])
+    return _result(1.0, value, target, "Fits your pets" + (f" ({', '.join(limits)})." if limits else "."), known=True, passes=True)
+
+
+def _score_fenced_yard(c: dict[str, Any], place: dict[str, Any]) -> dict[str, Any]:
+    d = place.get("fenced_yard")
+    return _score_yes(d is not None, bool(d), "a fenced yard", "yes" if d else "no", "The fenced yard")
 
 
 def _score_newer(c: dict[str, Any], place: dict[str, Any]) -> dict[str, Any]:
@@ -252,7 +291,9 @@ def score_criterion(c: dict[str, Any], place: dict[str, Any], ctx: dict[str, Any
     elif kind == "parking":
         r = _score_parking(c, place)
     elif kind == "pets":
-        r = _score_pets(c, place)
+        r = _score_pets(c, place, ctx)
+    elif kind == "fenced_yard":
+        r = _score_fenced_yard(c, place)
     elif kind == "newer":
         r = _score_newer(c, place)
     elif kind == "custom":
@@ -278,13 +319,15 @@ def score_place(place: dict[str, Any], criteria: Iterable[dict[str, Any]], *, mo
                 anchors: Iterable[dict[str, Any]] = (), commutes: Iterable[dict[str, Any]] = (),
                 custom_scores: dict[int, float] | None = None, budget_max: float | None = None,
                 settings: dict[str, Any] | None = None, cost: dict[str, Any] | None = None,
-                serious_flag: bool | None = None, people: int = 1) -> dict[str, Any]:
+                serious_flag: bool | None = None, people: int = 1,
+                pets: dict[str, Any] | None = None) -> dict[str, Any]:
     """Score a place. ``criteria`` rows have ``kind``, ``weight``, ``dealbreaker`` and ``target`` (a dict).
     ``commutes`` are the place's stored commute rows; ``cost`` can be passed to avoid computing it twice.
+    ``pets`` is the search's pet profile ({kind, weight, count}); without it only the pet policy is checked.
     ``serious_flag`` says the listing shows a serious scam sign (worked out from the text when left as None)."""
     ctx = {"cost": cost if cost is not None else money.true_monthly_cost(place, mode, settings, people),
            "budget_max": budget_max, "anchors": {a["id"]: a for a in anchors}, "commutes": list(commutes),
-           "custom_scores": custom_scores or {}, "mode": mode}
+           "custom_scores": custom_scores or {}, "mode": mode, "pets": pets or {}}
     items = [score_criterion(c, place, ctx) for c in criteria]
     total_w = sum(max(0.0, float(i["weight"] or 0)) for i in items)
     raw = None

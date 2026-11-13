@@ -36,7 +36,8 @@ FORM_FIELDS = (
     "title", "address", "unit", "city", "state", "zip", "lat", "lng", "url", "source", "listing_text", "price", "beds", "baths",
     "sqft", "laundry", "dishwasher", "parking", "parking_cost", "pets", "pet_rent", "pet_fee", "utilities_included",
     "utilities_estimate", "year_built", "available_from", "lease_start", "lease_end", "lease_months", "deposit",
-    "application_fee", "other_monthly_fees", "move_in_fees", "broker_fee", "hoa", "property_tax", "insurance", "rating", "notes")
+    "application_fee", "other_monthly_fees", "move_in_fees", "broker_fee", "hoa", "property_tax", "insurance", "rating", "notes",
+    "pet_weight_limit", "pet_count_limit", "pet_breed_note", "pet_deposit", "fenced_yard")
 
 
 def _form_fields(form: Any, names: tuple[str, ...] = FORM_FIELDS) -> dict[str, str]:
@@ -273,7 +274,7 @@ async def delete_place(request: Request, place_id: int):
 # --------------------------------------------------------------------------- Search
 KIND_TARGET_KEYS = {"price": ("max",), "beds": ("min",), "baths": ("min",), "sqft": ("min",),
                     "commute": ("anchor_id", "mode", "minutes"), "laundry": ("want",), "parking": ("want",),
-                    "pets": ("want",), "newer": ("year",)}
+                    "pets": ("want",), "newer": ("year",), "fenced_yard": ()}
 
 
 def _target_from_form(kind: str, form: Any) -> dict[str, Any]:
@@ -357,7 +358,7 @@ async def create_search(request: Request):
 async def update_search(request: Request, search_id: int):
     store = get_store(request)
     form = await request.form()
-    values: dict[str, Any] = {k: form.get(k) for k in ("name", "mode", "area", "move_in", "target_close", "budget_max", "notes", "people") if k in form}
+    values: dict[str, Any] = {k: form.get(k) for k in ("name", "mode", "area", "move_in", "target_close", "budget_max", "notes", "people", "pet_kind", "pet_weight", "pet_count") if k in form}
     values["hide_dealbreakers"] = "1" if form.get("hide_dealbreakers") == "1" else "0"
     try:
         store.update_search(search_id, **values)

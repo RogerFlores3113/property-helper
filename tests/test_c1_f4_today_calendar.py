@@ -57,6 +57,11 @@ def test_migration_adds_place_dates_to_an_old_database(tmp_path):
     con = sqlite3.connect(path)
     con.execute("DROP TABLE place_dates")
     con.execute("ALTER TABLE searches DROP COLUMN people")  # a real version-1 database has neither
+    con.execute("DROP TABLE place_checklist")  # and none of what later steps add (pets and applications)
+    for col in ("pet_weight_limit", "pet_count_limit", "pet_breed_note", "pet_deposit", "fenced_yard"):
+        con.execute(f"ALTER TABLE places DROP COLUMN {col}")
+    for col in ("pet_kind", "pet_weight", "pet_count"):
+        con.execute(f"ALTER TABLE searches DROP COLUMN {col}")
     con.execute("PRAGMA user_version = 1")
     con.commit()
     con.close()

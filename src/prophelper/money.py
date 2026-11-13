@@ -126,7 +126,7 @@ def cash_at_move_in(place: dict[str, Any]) -> dict[str, Any] | None:
     if last:
         parts.append(("Last month's rent", rent))
     for key, label in (("deposit", "Deposit"), ("application_fee", "Application fee"), ("move_in_fees", "Move-in fees"),
-                       ("broker_fee", "Broker fee"), ("pet_fee", "Pet fee")):
+                       ("broker_fee", "Broker fee"), ("pet_fee", "Pet fee"), ("pet_deposit", "Pet deposit (comes back)")):
         v = num(place.get(key))
         if v:
             parts.append((label, v))
