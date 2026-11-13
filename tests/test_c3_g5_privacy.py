@@ -61,3 +61,9 @@ def test_fresh_data_folder_is_700_and_database_600(tmp_path, monkeypatch):
         os.umask(old)
     assert target.stat().st_mode & 0o777 == 0o700
     assert db.stat().st_mode & 0o777 == 0o600
+
+
+def test_connect_page_says_what_claude_can_read(client):
+    html = client.get("/connect").text
+    assert "can read your notes and ratings on places when you ask Claude about them" in html
+    assert "Nothing is sent anywhere until you use Claude" in html
