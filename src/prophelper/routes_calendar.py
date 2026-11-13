@@ -6,6 +6,7 @@
     POST /tours/{id}/status             mark a tour done, cancelled or booked again
     POST /tours/{id}/details            save the tour checklist, rating and notes
     POST /tours/{id}/delete             delete a tour (tick box to confirm)
+    POST /places/{id}/dates             add a key date (application deadline, inspection, closing...); POST /place-dates/{id}/delete
 """
 from __future__ import annotations
 
@@ -16,13 +17,14 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import Response
 
-from . import helpers, ics
+from . import helpers, ics, today as today_mod
 from .deps import get_store, redirect, render
-from .store import TOUR_ITEMS, NotFound, Store
+from .store import PLACE_DATE_LABELS, TOUR_ITEMS, NotFound, Store
 
 router = APIRouter()
 
-KIND_LABELS = {"tour": "Tour", "available": "Available", "lease_start": "Lease starts", "lease_end": "Lease ends"}
+KIND_LABELS = {"tour": "Tour", "available": "Available", "lease_start": "Lease starts", "lease_end": "Lease ends",
+               "key_date": "Key date", "target": "Your date"}
 DATE_KEYS = (("available_from", "available"), ("lease_start", "lease_start"), ("lease_end", "lease_end"))
 WEEKDAYS = ("Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun")
 
@@ -64,6 +66,32 @@ def calendar_items(store: Store, search_id: int | None, start: date | None = Non
             if d:
                 items.append({"date": d, "kind": kind, "kind_label": KIND_LABELS[kind], "time": "", "sort": "00:00",
                               "text": KIND_LABELS[kind], "title": p["title"], "place_id": p["id"], "href": f"/places/{p['id']}"})
+    for r in store.list_place_dates(search_id=search_id):
+        if r["stage"] == "Passed":
+            continue
+        try:
+            d = date.fromisoformat(r["date"])
+        except ValueError:
+            continue
+        label = PLACE_DATE_LABELS.get(r["kind"], "Date")
+        clock = today_mod._clock(r["time"])
+        items.append({"date": d, "kind": "key_date", "kind_label": label, "time": clock, "sort": r["time"] or "00:00",
+                      "text": label, "title": r["title"], "place_id": r["place_id"], "href": f"/places/{r['place_id']}#dates",
+                      "note": r["note"], "time24": r["time"], "date_id": r["id"]})
+    try:
+        search = store.get_search(search_id)
+    except NotFound:
+        search = None
+    target = today_mod.target_date(search) if search else None
+    if target:
+        try:
+            td = date.fromisoformat(target[1])
+        except ValueError:
+            td = None
+        if td:
+            label = today_mod.TARGET_LABELS[target[0]]
+            items.append({"date": td, "kind": "target", "kind_label": label, "time": "", "sort": "00:00", "text": label,
+                          "title": search["name"], "place_id": None, "href": f"/search?id={search_id}"})
     items = [i for i in items if (start is None or i["date"] >= start) and (end is None or i["date"] < end)]
     items.sort(key=lambda i: (i["date"], i["sort"], i["title"].lower()))
     return items
@@ -73,17 +101,33 @@ def ics_items(items: list[dict[str, Any]], places: dict[int, dict[str, Any]]) ->
     """The dicts :func:`ics.build_calendar` wants, from calendar items. A tour's notes, rating and checklist are never used."""
     out = []
     for it in items:
-        place = places.get(it["place_id"], {})
+        place = places.get(it["place_id"], {}) if it["place_id"] is not None else {}
         where = ", ".join(x for x in (place.get("address"), place.get("city")) if x)
         if it["kind"] == "tour":
             t = it["tour"]
             desc = "Tour" + (f" with {t['with_whom']}" if t["with_whom"] else "") + (f". {t['where_note']}" if t["where_note"] else "")
             out.append({"uid": f"tour-{t['id']}", "summary": f"Tour: {it['title']}", "description": desc, "location": where,
                         "starts_at": t["starts_at"], "duration_minutes": t["duration_minutes"], "updated": t.get("created_at")})
+        elif it["kind"] == "key_date" and it.get("time24"):
+            # a key date with a clock time is a short timed event (floating local time, like a tour)
+            start = f"{it['date'].isoformat()}T{it['time24']}"
+            out.append({"uid": f"date-{it['date_id']}", "summary": f"{it['text']}: {it['title']}",
+                        "description": it.get("note", ""), "location": where, "starts_at": helpers_to_utc(start), "duration_minutes": 60,
+                        "updated": place.get("updated_at")})
+        elif it["kind"] == "target":
+            out.append({"uid": f"search-{it['kind']}-{it['date'].isoformat()}", "summary": f"{it['text']}: {it['title']}",
+                        "date": it["date"].isoformat()})
         else:
-            out.append({"uid": f"place-{it['place_id']}-{it['kind']}", "summary": f"{it['text']}: {it['title']}", "location": where,
-                        "date": it["date"].isoformat(), "updated": place.get("updated_at")})
+            out.append({"uid": f"place-{it['place_id']}-{it['kind']}" + (f"-{it['date_id']}" if it["kind"] == "key_date" else ""),
+                        "summary": f"{it['text']}: {it['title']}", "location": where,
+                        "description": it.get("note", ""), "date": it["date"].isoformat(), "updated": place.get("updated_at")})
     return out
+
+
+def helpers_to_utc(local_text: str) -> str:
+    from .store import to_utc_iso
+
+    return to_utc_iso(local_text)
 
 
 def month_weeks(first: date, items: list[dict[str, Any]], today: date) -> list[list[dict[str, Any]]]:
@@ -168,15 +212,25 @@ def _starts_at(day: str, clock: str) -> str:
 @router.post("/places/{place_id}/tours", include_in_schema=False)
 async def book_tour(request: Request, place_id: int):
     store = get_store(request)
-    _place_or_404(store, place_id)
+    before = _place_or_404(store, place_id)
     form = await request.form()
     try:
-        store.add_tour(place_id, _starts_at(str(form.get("day", "")), str(form.get("time", ""))),
-                       duration_minutes=form.get("duration_minutes") or 30, with_whom=str(form.get("with_whom", "")),
-                       where_note=str(form.get("where_note", "")))
+        tour = store.add_tour(place_id, _starts_at(str(form.get("day", "")), str(form.get("time", ""))),
+                              duration_minutes=form.get("duration_minutes") or 30, with_whom=str(form.get("with_whom", "")),
+                              where_note=str(form.get("where_note", "")))
     except ValueError as exc:
         return redirect(f"/places/{place_id}#tours", error=str(exc))
-    return redirect(f"/places/{place_id}#tours", notice="Tour booked. It shows on Today and the Calendar.")
+    after = store.get_place(place_id)
+    mode = store.get_search(after["search_id"])["mode"]
+    said = "Tour booked. It shows on Today and the Calendar."
+    if after["stage"] != before["stage"]:
+        said += f" The place moved to {after['stage']}."
+    elif mode == "buy":
+        said += f" The place stays at {after['stage']}. Move it yourself when you are ready."
+    clash = store.overlapping_tour(tour, buffer_minutes=60)
+    if clash:
+        said += f" Heads up: it is close to your tour at {clash['title']} ({helpers.local_time(clash['starts_at'])}). Check you can get from one to the other."
+    return redirect(f"/places/{place_id}#tours", notice=said)
 
 
 @router.post("/tours/{tour_id}/status", include_in_schema=False)
@@ -227,3 +281,28 @@ async def tour_delete(request: Request, tour_id: int):
         return redirect(f"/places/{tour['place_id']}#tours", error="Tick the box to confirm. Deleting a tour can't be undone.")
     store.delete_tour(tour_id)
     return redirect(f"/places/{tour['place_id']}#tours", notice="Tour deleted.")
+
+
+# --------------------------------------------------------------------------- key dates
+@router.post("/places/{place_id}/dates", include_in_schema=False)
+async def add_key_date(request: Request, place_id: int):
+    store = get_store(request)
+    _place_or_404(store, place_id)
+    form = await request.form()
+    try:
+        store.add_place_date(place_id, str(form.get("kind", "")), str(form.get("day", "")), time=str(form.get("time", "")),
+                             note=str(form.get("note", "")))
+    except ValueError as exc:
+        return redirect(f"/places/{place_id}#dates", error=str(exc))
+    return redirect(f"/places/{place_id}#dates", notice="Date saved. It shows on Today and the Calendar.")
+
+
+@router.post("/place-dates/{date_id}/delete", include_in_schema=False)
+async def delete_key_date(request: Request, date_id: int):
+    store = get_store(request)
+    try:
+        row = store.get_place_date(date_id)
+    except NotFound:
+        raise HTTPException(404, "That date doesn't exist (it may have been removed).") from None
+    store.delete_place_date(date_id)
+    return redirect(f"/places/{row['place_id']}#dates", notice="Date removed.")

@@ -2,7 +2,7 @@
 {% from "_macros.html" import page_head, button %}
 {% block title %}Calendar &middot; Property Helper{% endblock %}
 {% block body %}
-{% call page_head("Calendar", ("Tours, move-in dates and lease dates for " ~ search.name) if search else "Tours, move-in dates and lease dates.") %}
+{% call page_head("Calendar", ("Tours, key dates, move-in dates and lease dates for " ~ search.name) if search else "Tours, move-in dates and lease dates.") %}
   {{ button("Add to my calendar (file)", href="/calendar.ics", title="Works with Apple Calendar, Google Calendar and Outlook. Notes, ratings and contact details are left out.") }}
 {% endcall %}
 {% if search is none %}
@@ -14,7 +14,7 @@
   <a class="btn small" href="/calendar?month={{ next_month }}" aria-label="Next month">Next &rarr;</a>
   {% if not is_current %}<a class="btn small ghost" href="/calendar">This month</a>{% endif %}
 </div>
-<p class="legend fine" aria-label="Key"><span class="chip tour">Tour</span> <span class="chip available">Available</span> <span class="chip lease_start">Lease starts</span> <span class="chip lease_end">Lease ends</span></p>
+<p class="legend fine" aria-label="Key"><span class="chip tour">Tour</span> <span class="chip available">Available</span> <span class="chip lease_start">Lease starts</span> <span class="chip lease_end">Lease ends</span> <span class="chip key_date">Key date</span> <span class="chip target">{{ 'Target close date' if search and search.mode == 'buy' else 'Your move-in date' }}</span></p>
 
 <section class="card" aria-labelledby="agenda-h">
   <h2 id="agenda-h">{{ month_label }} in a list <span class="count">{{ count }}</span></h2>

@@ -723,6 +723,8 @@ input, select, textarea, progress { accent-color: var(--accent); }
 .chip.tour { background: var(--s-screen-bg); color: var(--s-screen-fg); }
 .chip.available { background: var(--s-applied-bg); color: var(--s-applied-fg); }
 .chip.lease_start { background: var(--s-offer-bg); color: var(--s-offer-fg); }
+.chip.key_date { background: var(--s-rejected-bg); color: var(--s-rejected-fg); border-left-style: double; border-left-width: 5px; }
+.chip.target { background: var(--surface-2); color: var(--text); font-weight: 600; border-left-style: dashed; }
 .chip.lease_end { background: var(--s-interview-bg); color: var(--s-interview-fg); }
 .agenda-list h3 { margin: .6rem 0 .2rem; font-size: 1rem; }
 .cmp-wrap { overflow-x: auto; margin-bottom: 1rem; }

@@ -14,7 +14,7 @@
     <li class="item"><div class="item-main">
       <a class="item-title" href="/contacts/{{ c.id }}">{{ c.name }}</a>
       <span class="item-sub">{{ c.role|capitalize }}{% if c.company %} at {{ c.company }}{% endif %}{% if c.phone %} &middot; {{ c.phone }}{% endif %}{% if c.email %} &middot; {{ c.email }}{% endif %}</span>
-      {% if _waiting.get(c.id) %}<span class="badge wait">Waiting on a reply ({{ _waiting[c.id].days }} days)</span>{% endif %}
+      {% if _waiting.get(c.id) %}<span class="badge wait">Waiting on a reply ({{ _waiting[c.id].days }} day{{ 's' if _waiting[c.id].days != 1 }})</span>{% endif %}
     </div>
     <div class="item-actions"><form class="inline" method="post" action="/places/{{ place.id }}/contacts/{{ c.id }}/unlink">{{ button("Take off", small=True, aria="Take " ~ c.name ~ " off this place") }}</form></div></li>
     {% endfor %}

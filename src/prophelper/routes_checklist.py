@@ -1,6 +1,8 @@
-"""The application checklist: one reusable list of what a landlord usually asks for.
+"""The application checklist: one reusable list of what a landlord (or, for a buyer, a lender and seller) usually asks for.
+A fresh list starts with renter items, or buyer items when the very first search is a buy search; lists you already have are never changed.
 
     GET  /checklist                      the list, with how many are ready
+    POST /checklist/defaults             add the usual items for rent or buy that the list doesn't have yet
     POST /checklist/items                add an item
     POST /checklist/items/{id}           save its label and note
     POST /checklist/items/{id}/done      tick it or untick it (value=1 or 0)
@@ -32,7 +34,20 @@ def _item_or_404(store: Store, item_id: int) -> dict[str, Any]:
 def checklist_page(request: Request):
     store = get_store(request)
     items = store.list_checklist()
-    return render(request, "checklist.html", items=items, done=sum(1 for i in items if i["done"]))
+    search = store.current_search()
+    mode = search["mode"] if search else "rent"
+    have = {i["label"].strip().lower() for i in items}
+    missing = [label for label, _n in store.default_checklist(mode) if label.strip().lower() not in have]
+    return render(request, "checklist.html", items=items, done=sum(1 for i in items if i["done"]), mode=mode, missing=missing)
+
+
+@router.post("/checklist/defaults", include_in_schema=False)
+async def add_defaults(request: Request):
+    store = get_store(request)
+    form = await request.form()
+    mode = "buy" if str(form.get("mode", "")) == "buy" else "rent"
+    n = store.add_default_checklist_items(mode)
+    return redirect("/checklist", notice=f"Added {n} item{'s' if n != 1 else ''}." if n else "You already have all of those.")
 
 
 @router.post("/checklist/items", include_in_schema=False)

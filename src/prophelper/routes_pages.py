@@ -24,7 +24,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from . import backups, enrich, helpers, parsers, paths, stages
+from . import backups, enrich, helpers, parsers, paths, stages, today
 from .deps import get_store, is_htmx, redirect, render
 from .store import COMMUTE_MODES, NotFound, StageRuleError, Store
 
@@ -60,15 +60,15 @@ def today_page(request: Request):
     search = store.current_search()
     all_searches = store.list_searches(include_archived=True)
     if search is None:
-        return render(request, "today.html", search=None, first_run=not all_searches, tours=[], waiting=[], dates=[], new=[],
-                      no_criteria=False, place_count=0)
+        return render(request, "today.html", search=None, first_run=not all_searches, fits=[], coming=[], waiting=[], new=[],
+                      late=[], no_criteria=False, place_count=0, coming_days=today.COMING_UP_DAYS)
     sid = search["id"]
-    waiting = [w for w in store.waiting_on_reply() if w["place"] is None or w["place"]["search_id"] == sid]
-    new = store.new_places(sid)
+    data = today.build(store, search)
     criteria = store.list_criteria(sid)
-    return render(request, "today.html", search=search, first_run=False, tours=store.upcoming_tours(7, search_id=sid),
-                  waiting=waiting, dates=store.upcoming_dates(14, search_id=sid), new=new, no_criteria=not criteria,
-                  place_count=store.count_places(search_id=sid), follow_up_days=store.get_setting_int("follow_up_days", 3))
+    return render(request, "today.html", search=search, first_run=False, fits=data["fits"], coming=data["coming"],
+                  waiting=data["waiting"], new=data["new"], late=data["late"], no_criteria=not criteria,
+                  place_count=store.count_places(search_id=sid), follow_up_days=store.get_setting_int("follow_up_days", 3),
+                  coming_days=today.COMING_UP_DAYS)
 
 
 # --------------------------------------------------------------------------- Board
@@ -102,6 +102,13 @@ def board_page(request: Request, show_hidden: int = 0):
                   hidden_dealbreaker=hidden_deal, hidden_hand=hidden_hand, show_hidden=bool(show_hidden), total=len(rows))
 
 
+def _toured_hint(store: Store, place: dict[str, Any]) -> str:
+    """Moving to Toured with no tour logged is allowed; this is the gentle note that offers to log one."""
+    if place["stage"] != "Toured" or any(t["status"] != "cancelled" for t in store.list_tours(place["id"])):
+        return ""
+    return "You haven't logged a tour for it. Add the tour on the place page if you want its checklist and notes kept."
+
+
 @router.post("/places/{place_id}/stage", include_in_schema=False)
 async def move_place(request: Request, place_id: int):
     store = get_store(request)
@@ -111,14 +118,15 @@ async def move_place(request: Request, place_id: int):
     _place_or_404(store, place_id)
     try:
         place = store.move_stage(place_id, stage, note=note)
+        hint = _toured_hint(store, place)
     except (StageRuleError, ValueError) as exc:
         if is_htmx(request):
             return JSONResponse({"ok": False, "error": str(exc)}, status_code=400)
         return redirect(f"/places/{place_id}", error=str(exc))
     if is_htmx(request):
-        return JSONResponse({"ok": True, "stage": place["stage"], "days": helpers.days_in_stage(place)})
+        return JSONResponse({"ok": True, "stage": place["stage"], "days": helpers.days_in_stage(place), "note": hint})
     return redirect(f"/places/{place_id}" if "place" in (request.headers.get("referer") or "") else "/board",
-                    notice=f"Moved {place['title']} to {place['stage']}.")
+                    notice=f"Moved {place['title']} to {place['stage']}." + (" " + hint if hint else ""))
 
 
 # --------------------------------------------------------------------------- Place
@@ -140,7 +148,8 @@ def _place_page(request: Request, place_id: int, *, status: int = 200, form_valu
             saved = stored.get((a["id"], mode))
             commute_rows.append({"anchor": a, "mode": mode, "found": found, "saved": saved})
     criteria = store.list_criteria(search["id"])
-    return render(request, "place.html", status_code=status, place=full, search=search, stages=stages.stages_for(search["mode"]),
+    return render(request, "place.html", status_code=status, place=full, search=search,
+                  avail_warning=today.availability_warning(place, search), stages=stages.stages_for(search["mode"]),
                   events=store.list_events(place_id), commute_rows=commute_rows, anchors=anchors, criteria=criteria,
                   custom_scores=store.custom_scores(place_id), form_values=form_values or {}, form_error=error,
                   all_searches=store.list_searches(), listing_has_text=bool(place["listing_text"]),

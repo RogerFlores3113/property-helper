@@ -60,6 +60,21 @@ DEFAULT_SETTINGS: dict[str, str] = {
     "ai_model": "claude-sonnet-5-5", "follow_up_days": "3", "map_tiles": "1", "geocode": "0", "show_photos": "0",
     "strict_scraping": "0", "down_payment_pct": "20", "mortgage_rate": "6.5", "loan_years": "30",
 }
+DEFAULT_CHECKLIST_BUY: tuple[tuple[str, str], ...] = (
+    ("Mortgage pre-approval letter", "From your lender. Sellers expect one with an offer"),
+    ("Proof of funds", "Bank statements for the down payment and closing costs"),
+    ("Inspector picked", "Someone to call as soon as an offer is accepted"),
+    ("Homeowner's insurance quote", "Your lender will ask for proof of insurance"),
+    ("Title company or closing attorney", ""), ("Buyer's agent chosen", ""),
+    ("Recent pay stubs and tax returns", "Your lender will ask for these"), ("Photo ID ready", ""),
+)
+PLACE_DATE_KINDS_RENT: tuple[str, ...] = ("application_deadline", "application_sent", "move_in", "other")
+PLACE_DATE_KINDS_BUY: tuple[str, ...] = ("offer_deadline", "inspection", "appraisal", "financing_deadline", "closing", "other")
+PLACE_DATE_LABELS: dict[str, str] = {
+    "application_deadline": "Application deadline", "application_sent": "Application sent", "move_in": "Move-in",
+    "offer_deadline": "Offer deadline", "inspection": "Inspection", "appraisal": "Appraisal",
+    "financing_deadline": "Financing deadline", "closing": "Closing", "other": "Other date",
+}
 STRICT_ADDS_PER_CALL = 5
 STRICT_ADDS_PER_HOUR = 20
 UPLOAD_LIMIT_BYTES = 20 * 1024 * 1024
@@ -276,7 +291,20 @@ CREATE TABLE custom_scores (
 """
 
 # Append-only: never edit an entry once released, add a new one at the end.
-_MIGRATIONS: list[str] = [_SCHEMA_V1]
+# Step 2: key dates per place (application deadline, inspection, closing...). Self-contained so it can be renumbered.
+_SCHEMA_V2_PLACE_DATES = """
+CREATE TABLE IF NOT EXISTS place_dates (
+    id INTEGER PRIMARY KEY,
+    place_id INTEGER NOT NULL REFERENCES places(id) ON DELETE CASCADE,
+    kind TEXT NOT NULL DEFAULT 'other',
+    date TEXT NOT NULL,
+    time TEXT NOT NULL DEFAULT '',
+    note TEXT NOT NULL DEFAULT ''
+);
+CREATE INDEX IF NOT EXISTS idx_place_dates_place ON place_dates(place_id, date);
+"""
+
+_MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2_PLACE_DATES]
 
 
 class NotFound(LookupError):
@@ -308,6 +336,16 @@ def parse_iso(value: str | None) -> datetime | None:
     except ValueError:
         return None
     return dt if dt.tzinfo else dt.replace(tzinfo=_local_tz())
+
+
+def calendar_days_ago(value: str | datetime | None, now: datetime | None = None) -> int | None:
+    """Whole calendar days between a stored time and now, on this computer's clock (written 11 pm yesterday is 1 day
+    ago). The one count Today, Contacts and the place page all use. None when the time can't be read."""
+    dt = value if isinstance(value, datetime) else parse_iso(value)
+    if dt is None:
+        return None
+    ref = (now or datetime.now(timezone.utc)).astimezone().date()
+    return (ref - dt.astimezone().date()).days
 
 
 def _local_tz() -> timezone:
@@ -626,6 +664,32 @@ class Store:
             finally:
                 self._conn.execute("PRAGMA foreign_keys = ON")
 
+    @staticmethod
+    def default_checklist(mode: str) -> tuple[tuple[str, str], ...]:
+        """The starting checklist for a search mode: renters get ID, income and references; buyers get a pre-approval
+        letter, proof of funds, an inspector and so on."""
+        return DEFAULT_CHECKLIST_BUY if mode == "buy" else DEFAULT_CHECKLIST
+
+    def _swap_untouched_checklist(self, items: tuple[tuple[str, str], ...]) -> None:
+        """Only for the very first search of a fresh app: if the list is still exactly the renter starter list with
+        nothing ticked, put ``items`` in its place. Any list the person has touched is left alone."""
+        rows = self._rows("SELECT label, note, done FROM checklist_items ORDER BY sort_order, id")
+        if [(r["label"], r["note"]) for r in rows] != list(DEFAULT_CHECKLIST) or any(r["done"] for r in rows):
+            return
+        self._exec("DELETE FROM checklist_items")
+        for i, (label, note) in enumerate(items):
+            self._exec("INSERT INTO checklist_items(label, note, done, sort_order) VALUES (?, ?, 0, ?)", (label, note, i))
+
+    def add_default_checklist_items(self, mode: str) -> int:
+        """Add the starter items of ``mode`` that the list doesn't have yet (matched by label). Returns how many."""
+        have = {r["label"].strip().lower() for r in self.list_checklist()}
+        n = 0
+        for label, note in self.default_checklist(mode):
+            if label.strip().lower() not in have:
+                self.add_checklist_item(label, note)
+                n += 1
+        return n
+
     def _seed_checklist(self) -> None:
         for i, (label, note) in enumerate(DEFAULT_CHECKLIST):
             self._conn.execute("INSERT INTO checklist_items(label, note, done, sort_order) VALUES (?, ?, 0, ?)",
@@ -820,6 +884,8 @@ class Store:
             sid = cur.lastrowid
             if not self.get_setting("current_search_id", ""):
                 self.set_setting("current_search_id", sid)
+            if values.get("mode") == "buy" and not self._row("SELECT 1 AS x FROM searches WHERE id != ?", (sid,)):
+                self._swap_untouched_checklist(DEFAULT_CHECKLIST_BUY)
         return self.get_search(sid)
 
     def get_search(self, search_id: int) -> dict[str, Any]:
@@ -1501,7 +1567,7 @@ class Store:
             self._add_event(place_id, "tour", f"Tour {status}" + (f" with {_text(with_whom, 100)}" if with_whom else ""), None, by)
             self._touch(place_id)
             if advance and status == "booked":
-                self._advance_to(place, "Tour booked", by)
+                self._advance_to(place, "Tour booked", by, "Because a tour was booked.")
         return self.get_tour(cur.lastrowid)
 
     @staticmethod
@@ -1513,12 +1579,12 @@ class Store:
             raise ValueError("A rating is from 1 to 5.")
         return int(n)
 
-    def _advance_to(self, place: dict[str, Any], stage: str, by: str) -> None:
+    def _advance_to(self, place: dict[str, Any], stage: str, by: str, note: str = "") -> None:
         """Move a place forward to ``stage`` only if that is ahead of where it is (rent mode only)."""
         mode = self._mode_of(place["search_id"])
         fresh = self._require_place(place["id"])
         if mode == "rent" and stage in st.stages_for(mode) and st.is_forward(mode, fresh["stage"], stage):
-            self.move_stage(place["id"], stage, by_ai=(by == "ai"))
+            self.move_stage(place["id"], stage, by_ai=(by == "ai"), note=note)
 
     def get_tour(self, tour_id: int) -> dict[str, Any]:
         row = self._tour_out(self._row("SELECT * FROM tours WHERE id = ?", (tour_id,)))
@@ -1554,7 +1620,7 @@ class Store:
                 self._touch(cur["place_id"])
             if values.get("status") == "done" and cur["status"] != "done":
                 self._add_event(cur["place_id"], "tour", "Tour done", None, by)
-                self._advance_to(self._require_place(cur["place_id"]), "Toured", by)
+                self._advance_to(self._require_place(cur["place_id"]), "Toured", by, "Because the tour was marked done.")
         return self.get_tour(tour_id)
 
     def list_tours(self, place_id: int | None = None, *, start: Any = None, end: Any = None, status: str | None = None,
@@ -1590,6 +1656,83 @@ class Store:
         self.get_tour(tour_id)
         self._exec("DELETE FROM tours WHERE id = ?", (tour_id,))
         return True
+
+    def overlapping_tour(self, tour: dict[str, Any], buffer_minutes: int = 0) -> dict[str, Any] | None:
+        """Another booked tour that overlaps ``tour``, or starts or ends within ``buffer_minutes`` of it. The web
+        form uses 60 so a person is warned about two tours an hour apart; None when the way is clear."""
+        start = parse_iso(tour["starts_at"])
+        if start is None:
+            return None
+        end = start + timedelta(minutes=int(tour.get("duration_minutes") or 30))
+        pad = timedelta(minutes=buffer_minutes)
+        for o in self.list_tours(status="booked"):
+            if o["id"] == tour["id"]:
+                continue
+            s2 = parse_iso(o["starts_at"])
+            if s2 is not None and s2 < end + pad and s2 + timedelta(minutes=int(o["duration_minutes"])) > start - pad:
+                return o
+        return None
+
+    # ------------------------------------------------------------------ key dates (per place)
+    @staticmethod
+    def date_kinds(mode: str) -> tuple[str, ...]:
+        return PLACE_DATE_KINDS_BUY if mode == "buy" else PLACE_DATE_KINDS_RENT
+
+    def add_place_date(self, place_id: int, kind: str, day: Any, *, time: str = "", note: str = "") -> dict[str, Any]:
+        """Save a key date for a place. ``kind`` is one of the mode's kinds or 'other'; ``time`` is 'HH:MM' or blank."""
+        place = self._require_place(place_id)
+        kinds = self.date_kinds(self._mode_of(place["search_id"]))
+        kind = str(kind or "other").strip().lower().replace(" ", "_")
+        if kind not in kinds:
+            raise ValueError("Pick one of: " + ", ".join(PLACE_DATE_LABELS[k].lower() for k in kinds) + ".")
+        d = clean_date(day, "date")
+        if not d:
+            raise ValueError("Pick the day for this date.")
+        t = str(time or "").strip()
+        if t:
+            try:
+                datetime.strptime(t, "%H:%M")
+            except ValueError:
+                raise ValueError("Write the time like 14:30, or leave it blank.") from None
+        with self._write():
+            cur = self._exec("INSERT INTO place_dates(place_id, kind, date, time, note) VALUES (?, ?, ?, ?, ?)",
+                             (place_id, kind, d, t, _text(note, 300)))
+            self._add_event(place_id, "note", f"Added a date: {PLACE_DATE_LABELS[kind]} on {d}", None, "you")
+            self._touch(place_id)
+        return self._row("SELECT * FROM place_dates WHERE id = ?", (cur.lastrowid,))  # type: ignore[return-value]
+
+    def get_place_date(self, date_id: int) -> dict[str, Any]:
+        row = self._row("SELECT * FROM place_dates WHERE id = ?", (date_id,))
+        if row is None:
+            raise NotFound(f"Date {date_id} doesn't exist.")
+        return row
+
+    def delete_place_date(self, date_id: int) -> bool:
+        self.get_place_date(date_id)
+        self._exec("DELETE FROM place_dates WHERE id = ?", (date_id,))
+        return True
+
+    def list_place_dates(self, place_id: int | None = None, search_id: int | None = None) -> list[dict[str, Any]]:
+        """Key dates by day. Rows also carry the place's ``title`` and ``stage``. Archived places are left out."""
+        where, params = ["p.archived_at IS NULL"], []
+        if place_id is not None:
+            where.append("d.place_id = ?")
+            params.append(place_id)
+        if search_id is not None:
+            where.append("p.search_id = ?")
+            params.append(search_id)
+        rows = self._rows("SELECT d.*, p.title, p.stage FROM place_dates d JOIN places p ON p.id = d.place_id WHERE "
+                          + " AND ".join(where) + " ORDER BY d.date, d.time, d.id", params)
+        for r in rows:
+            r["label"] = PLACE_DATE_LABELS.get(r["kind"], "Date")
+        return rows
+
+    def upcoming_place_dates(self, days: int = 14, today: str | None = None, search_id: int | None = None) -> list[dict[str, Any]]:
+        """Key dates from today through ``days`` days ahead, for places that are still open."""
+        start = date.fromisoformat(today) if today else date.today()
+        end = start + timedelta(days=days)
+        return [r for r in self.list_place_dates(search_id=search_id)
+                if r["stage"] != st.PASSED and start.isoformat() <= r["date"] <= end.isoformat()]
 
     # ------------------------------------------------------------------ contacts
     def add_contact(self, name: str, *, role: str = "other", company: str = "", email: str = "", phone: str = "",
@@ -1720,7 +1863,7 @@ class Store:
                 place = _place_out(row)
                 if row is None:
                     continue
-            out.append({"contact": c, "last": last, "place": place, "days": (now - when).days})
+            out.append({"contact": c, "last": last, "place": place, "days": max(0, calendar_days_ago(when, now) or 0)})
         out.sort(key=lambda r: r["last"]["at"])
         return out
 
@@ -1895,7 +2038,7 @@ class Store:
         """Every row of the main tables, for a JSON or CSV export you read yourself. No settings and no AI key."""
         out: dict[str, list[dict[str, Any]]] = {}
         for table in ("searches", "criteria", "anchors", "places", "commutes", "events", "tours", "contacts", "place_contacts",
-                      "contact_log", "documents", "checklist_items", "ai_drafts"):
+                      "contact_log", "documents", "checklist_items", "ai_drafts", "place_dates"):
             out[table] = self._rows(f"SELECT * FROM {table}")
         return out
 

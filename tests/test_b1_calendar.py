@@ -35,7 +35,9 @@ def test_build_calendar_timed_and_all_day():
     text = ics.build_calendar(items, now=datetime(2027, 7, 2, tzinfo=timezone.utc))
     assert text.startswith("BEGIN:VCALENDAR\r\n") and text.endswith("END:VCALENDAR\r\n")
     assert "\n" not in text.replace("\r\n", "")
-    assert "DTSTART:20270730T190000Z" in text and "DTEND:20270730T194500Z" in text
+    # Timed events are floating local time now (no Z): see tests/test_c1_f4_calendar.py
+    start = datetime(2027, 7, 30, 19, 0, tzinfo=timezone.utc).astimezone()
+    assert f"DTSTART:{start:%Y%m%dT%H%M%S}\r\n" in text and "DTSTART:20270730T190000Z" not in text
     assert "DTSTART;VALUE=DATE:20270731" in text and "DTEND;VALUE=DATE:20270801" in text
     assert "SUMMARY:Tour: Maple\\, Row" in text
     assert "UID:tour-1@property-helper.local" in text

@@ -20,6 +20,7 @@
 </div>
 <p class="fine">Part of <a href="/search?id={{ search.id }}">{{ search.name }}</a>. Last moved {{ place.stage_changed_at|ago if place.stage_changed_at else 'never' }}.</p>
 
+{% if avail_warning %}<p class="flash warn" role="status">{{ avail_warning }}.</p>{% endif %}
 {% if form_error %}<p class="flash warn" role="alert" tabindex="-1">{{ form_error }}</p>{% endif %}
 
 {% if place.flags %}
@@ -66,13 +67,14 @@
     {% if events %}
     <ol class="timeline">
       {% for e in events %}
-      <li><span class="fine">{{ e.at|local }} &middot; {{ e.kind }}{% if e.source != 'you' %} &middot; by {{ 'an AI app' if e.source == 'ai' else e.source }}{% endif %}</span><br>{{ e.body }}</li>
+      <li><span class="fine">{{ e.at|local }} &middot; {{ e.kind }}{% if e.source == 'ai' %} &middot; by an AI app{% endif %}</span><br>{{ e.body }}</li>
       {% endfor %}
     </ol>
     {% else %}<p class="fine">Nothing yet. Moving a stage, saving changes and your notes all show up here.</p>{% endif %}
   </section>
 
   {% include "_place_tours.html" ignore missing %}
+  {% include "_place_dates.html" ignore missing %}
   {% include "_place_contacts.html" ignore missing %}
   {% include "_place_documents.html" ignore missing %}
   {% include "_place_ai.html" ignore missing %}
