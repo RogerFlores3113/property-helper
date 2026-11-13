@@ -15,7 +15,7 @@
   <header class="top">
     <a class="brand" href="/today">Property Helper</a>
     <nav aria-label="Main">
-      {% for href, label in [('/today', 'Today'), ('/board', 'Board'), ('/map', 'Map'), ('/calendar', 'Calendar'), ('/compare', 'Compare'), ('/contacts', 'Contacts'), ('/search', 'Search')] %}
+      {% for href, label in [('/today', 'Today'), ('/board', 'Board'), ('/map', 'Map'), ('/calendar', 'Calendar'), ('/compare', 'Compare'), ('/contacts', 'Contacts'), ('/checklist', 'Checklist'), ('/search', 'Search')] %}
       <a href="{{ href }}" class="{{ 'on' if path == href or (href != '/today' and path.startswith(href ~ '/')) }}"{% if path == href %} aria-current="page"{% endif %}>{{ label }}</a>
       {% endfor %}
     </nav>
