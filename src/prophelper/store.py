@@ -311,6 +311,29 @@ class NotFound(LookupError):
     """The id asked for does not exist (a page turns this into a 404, a tool into a friendly message)."""
 
 
+# Stages an AI may never move a place into: the won stages and Under contract (they commit the user to something).
+AI_NEVER_ENTERS: tuple[str, ...] = (*st.WON_STAGES, "Under contract")
+
+
+def ai_move_problem(mode: str, old: str, new: str, *, one_step: bool = True) -> str:
+    """Why an AI may not move a place from ``old`` to ``new``, or "" when it may. Passed is always allowed from an
+    open stage; otherwise one stage forward, never into AI_NEVER_ENTERS."""
+    if new == old or (new == st.PASSED and old != st.PASSED):
+        return ""
+    if old == st.PASSED:
+        return f"An AI can only move a place forward or to Passed, so {old} can't go back to {new}. Ask the user to move it in the app."
+    if new in AI_NEVER_ENTERS:
+        return f"An AI can't move a place to {new}. Ask the user to do this in the app."
+    if not st.is_forward(mode, old, new):
+        return f"An AI can only move a place forward or to Passed, so {old} can't go back to {new}. Ask the user to move it in the app."
+    if one_step:
+        stages = st.stages_for(mode)
+        nxt = stages[st.stage_index(mode, old) + 1]
+        if new != nxt:
+            return f"An AI moves a place one stage at a time, so from {old} the next stage is {nxt}, not {new}. Move it to {nxt} first, or ask the user."
+    return ""
+
+
 class StageRuleError(ValueError):
     """A stage move the rules do not allow (an AI moving a place backward, or a stage the mode does not have)."""
 
@@ -1196,6 +1219,8 @@ class Store:
                 if norm is None:
                     raise StageRuleError(f"A {mode} search has these stages: {', '.join(st.stages_for(mode))}.")
                 new_stage = norm
+                if by == "ai" and new_stage in AI_NEVER_ENTERS:
+                    raise StageRuleError(f"{new_stage} is for the user to set. Ask the user to do this in the app.")
             now = now_iso()
             cols = {"search_id": search_id, "stage": new_stage, "stage_changed_at": now, "created_at": now,
                     "updated_at": now, **values}
@@ -1313,9 +1338,11 @@ class Store:
         if parts:
             self._add_event(existing["id"], "ai", "AI changed " + "; ".join(parts), None, "ai")
 
-    def move_stage(self, place_id: int, stage: str, *, by_ai: bool = False, note: str = "") -> dict[str, Any]:
-        """Move a place to a stage of its search's mode. The user may move anywhere. With ``by_ai=True`` only forward
-        or to Passed is allowed (never backward, never out of Passed): anything else raises StageRuleError."""
+    def move_stage(self, place_id: int, stage: str, *, by_ai: bool = False, note: str = "", auto: bool = False) -> dict[str, Any]:
+        """Move a place to a stage of its search's mode. The user may move anywhere. With ``by_ai=True`` only one
+        stage forward or to Passed is allowed (never backward, never out of Passed, never into Under contract or a
+        won stage): anything else raises StageRuleError. ``auto`` is for the app's own follow-on moves (a booked tour
+        moves a place to Tour booked), which may skip ahead but never past the AI limits above."""
         place = self._require_place(place_id)
         mode = self._mode_of(place["search_id"])
         new = st.normalize_stage(mode, stage)
@@ -1324,9 +1351,10 @@ class Store:
         old = place["stage"]
         if new == old:
             return self.get_place(place_id)
-        if by_ai and not st.ai_can_move(mode, old, new):
-            raise StageRuleError(f"An AI can only move a place forward or to Passed, so {old} can't go back to {new}. "
-                                 "Ask the user to move it in the app.")
+        if by_ai:
+            problem = ai_move_problem(mode, old, new, one_step=not auto)
+            if problem:
+                raise StageRuleError(problem)
         now = now_iso()
         with self._write():
             self._exec("UPDATE places SET stage = ?, stage_changed_at = ?, updated_at = ?, seen_at = COALESCE(seen_at, ?) "
@@ -1584,7 +1612,7 @@ class Store:
         mode = self._mode_of(place["search_id"])
         fresh = self._require_place(place["id"])
         if mode == "rent" and stage in st.stages_for(mode) and st.is_forward(mode, fresh["stage"], stage):
-            self.move_stage(place["id"], stage, by_ai=(by == "ai"), note=note)
+            self.move_stage(place["id"], stage, by_ai=(by == "ai"), note=note, auto=True)
 
     def get_tour(self, tour_id: int) -> dict[str, Any]:
         row = self._tour_out(self._row("SELECT * FROM tours WHERE id = ?", (tour_id,)))

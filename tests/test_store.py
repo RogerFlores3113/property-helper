@@ -158,6 +158,9 @@ def test_stage_moves_user_anywhere_ai_forward_only(s):
     s.move_stage(p["id"], "Toured")
     s.move_stage(p["id"], "Saved")  # you can go back
     s.move_stage(p["id"], "Contacted", by_ai=True)
+    with pytest.raises(StageRuleError):
+        s.move_stage(p["id"], "Toured", by_ai=True)  # one stage at a time
+    s.move_stage(p["id"], "Tour booked", by_ai=True)
     s.move_stage(p["id"], "Toured", by_ai=True)
     with pytest.raises(StageRuleError):
         s.move_stage(p["id"], "Saved", by_ai=True)

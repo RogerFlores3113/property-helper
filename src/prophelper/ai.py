@@ -309,7 +309,7 @@ def _instructions(feature: str, place: dict[str, Any], purpose: str, contacts: l
     if feature == "message":
         _, ask = PURPOSES.get(purpose, PURPOSES[DEFAULT_PURPOSE])
         who = next((c for c in contacts if c.get("name")), None)
-        address = (f"Address it to {guards.inline(who['name'], 120)} ({who['role']})." if who
+        address = ("Address it to the first person listed under PEOPLE I HAVE ON FILE FOR THIS PLACE (their name is in the untrusted block below)." if who
                    else "I do not have a name, so open with a plain \"Hello\" and do not invent one.")
         return (ask + " " + address + " Write it as me, in the first person, as an email I can send (include a subject line on its own first line "
                 "starting with \"Subject:\"). Keep it under 120 words, polite and direct. End with \"Thanks,\" and then the placeholder [Your name]. "

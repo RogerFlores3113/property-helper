@@ -96,7 +96,7 @@ def test_add_place_with_commutes_from_the_ai(srv, store):
     r = add(srv, title="Commute Place", address="2 Ride St", lat=40.11, lng=-88.23,
             commutes=[{"anchor": "Campus", "mode": "bike", "minutes": 11}, {"anchor": "Nowhere", "mode": "bike", "minutes": 5}])
     out = text(r)
-    assert "Saved Campus by bike: 11 min" in out and "Skipped a commute" in out
+    assert "Saved <untrusted source=\"anchor name\">Campus</untrusted> by bike: 11 min" in out and "Skipped a commute" in out
     row = store.list_commutes(structured(r)["place_id"])[0]
     assert row["source"] == "ai" and row["minutes"] == 11
 
@@ -165,8 +165,10 @@ def test_add_note_goes_to_the_timeline_as_ai_and_keeps_notes(srv, store):
 
 def test_move_place_forward_and_to_passed_only(srv, store):
     pid = structured(add(srv, title="Mover", address="6 Move St"))["place_id"]
+    call(srv, "move_place", place_id=pid, stage="Contacted")
+    call(srv, "move_place", place_id=pid, stage="Tour booked")
     r = call(srv, "move_place", place_id=pid, stage="Toured", note="user said they went")
-    assert store.get_place(pid)["stage"] == "Toured" and "from Saved to Toured" in text(r)
+    assert store.get_place(pid)["stage"] == "Toured" and "from Tour booked to Toured" in text(r)
     assert "can't move it back" in text(r)
     assert "forward or to Passed" in err(srv, "move_place", place_id=pid, stage="Saved")
     assert "forward or to Passed" in err(srv, "move_place", place_id=pid, stage="Contacted")
@@ -284,7 +286,7 @@ def test_contacts_dedupe_link_and_log(srv, store):
     store.update_contact(cid, notes="user's own")
     call(srv, "add_contact", name="Pat Lee", company="Co Flats", notes="AI tries to overwrite")
     assert store.get_contact(cid)["notes"] == "user's own"
-    assert "role" in err(srv, "add_contact", name="Zed", role="wizard").lower()
+    assert "other" in text(call(srv, "add_contact", name="Zed", role="wizard"))  # an unknown role is saved as other, never rejected
     lg = call(srv, "log_contact", contact_id=cid, kind="email", body="Asked about the July lease", place_id=pid)
     entry = store.list_contact_log(cid)[0]
     assert entry["direction"] == "out" and entry["body"].startswith("(logged by AI)") and entry["place_id"] == pid
