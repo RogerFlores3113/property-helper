@@ -28,9 +28,10 @@ def test_parser_pet_limits():
     assert out["fenced_yard"] == 1
 
 
-def test_parser_plain_pet_deposit_stays_a_fee_and_no_fence():
+def test_parser_plain_pet_deposit_is_the_pet_deposit_and_no_fence():
+    # c3: a plain "pet deposit" is money that comes back (pet_deposit); a non-refundable one stays a fee
     out = parsers.parse_listing("Cats ok. Pet deposit $300. No fenced yard.")
-    assert out["pet_fee"] == 300 and "pet_deposit" not in out and out["fenced_yard"] == 0
+    assert out["pet_deposit"] == 300 and "pet_fee" not in out and out["fenced_yard"] == 0
     assert "pet_weight_limit" not in parsers.parse_listing("Cats ok.")
 
 

@@ -85,18 +85,19 @@ OPINION_NOTE_MAX = 500
 
 PLACE_TEXT = ("title", "address", "unit", "city", "state", "zip", "url", "source", "listing_text", "laundry", "parking",
               "pets", "utilities_included", "available_from", "lease_start", "lease_end", "notes", "ai_notes",
-              "fit_notes", "red_flags", "pet_breed_note", "special_assessment_payer", "listing_agent")
+              "fit_notes", "red_flags", "pet_breed_note", "special_assessment_payer", "listing_agent", "tenant_pays")
 PLACE_REAL = ("lat", "lng", "price", "beds", "baths", "parking_cost", "pet_rent", "pet_fee", "utilities_estimate", "pet_weight_limit", "pet_deposit",
               "deposit", "application_fee", "other_monthly_fees", "move_in_fees", "broker_fee", "hoa", "property_tax",
               "insurance", "special_assessment", "closing_costs")
-PLACE_INT = ("sqft", "year_built", "lease_months", "rating", "fit_score", "pet_count_limit", "days_on_market")
+PLACE_INT = ("sqft", "year_built", "lease_months", "rating", "fit_score", "pet_count_limit", "days_on_market", "months_up_front")
+TENANT_PAYS_CHOICES = ("electric", "gas", "water", "trash", "internet", "heat")
 PLACE_DATES = ("available_from", "lease_start", "lease_end")
 PLACE_FIELDS: tuple[str, ...] = (PLACE_TEXT + PLACE_REAL + PLACE_INT + ("photo_urls", "dishwasher", "fenced_yard", "hidden", "is_sample"))
 # What a form or the AI may set (stage goes through move_stage).
 PLACE_EDITABLE: tuple[str, ...] = tuple(f for f in PLACE_FIELDS if f not in ("is_sample",))
 TEXT_LIMITS = {"title": 300, "address": 300, "unit": 40, "city": 120, "state": 60, "zip": 20, "url": 2000, "source": 120,
                "listing_text": 200_000, "utilities_included": 300, "notes": 50_000, "ai_notes": 50_000,
-               "fit_notes": 20_000, "red_flags": 5_000, "laundry": 20, "parking": 20, "pets": 20, "pet_breed_note": 300}
+               "fit_notes": 20_000, "red_flags": 5_000, "laundry": 20, "parking": 20, "pets": 20, "pet_breed_note": 300, "tenant_pays": 80}
 PHOTOS_MAX = 30
 AI_PROTECTED = ("notes", "rating", "hidden", "is_sample")  # fields an AI update never writes
 AI_EVENT_TEXT_MAX = 2000
@@ -352,7 +353,13 @@ ALTER TABLE places ADD COLUMN closing_costs REAL;
 ALTER TABLE places ADD COLUMN listing_agent TEXT NOT NULL DEFAULT '';
 """
 
-_MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2_PLACE_DATES, _MIGRATION_PEOPLE, _MIGRATION_PETS_APPLY, _MIGRATION_OPINIONS, _MIGRATION_BUYER_FIELDS]
+# Rent due before move-in (months) and the utilities the renter pays. One self-contained step so it can be renumbered at merge time.
+_MIGRATION_RENT_UPFRONT = """
+ALTER TABLE places ADD COLUMN months_up_front INTEGER;
+ALTER TABLE places ADD COLUMN tenant_pays TEXT NOT NULL DEFAULT '';
+"""
+
+_MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2_PLACE_DATES, _MIGRATION_PEOPLE, _MIGRATION_PETS_APPLY, _MIGRATION_OPINIONS, _MIGRATION_BUYER_FIELDS, _MIGRATION_RENT_UPFRONT]
 
 
 class NotFound(LookupError):
@@ -1244,6 +1251,10 @@ class Store:
                 if word not in ("", "seller", "buyer"):
                     raise ValueError("Who pays a special assessment is seller or buyer.")
                 out[key] = word
+            elif key == "tenant_pays":
+                words = re.findall(r"[a-z]+", str(raw or "").lower())
+                words = ["electric" if w == "electricity" else "internet" if w in ("wifi", "cable") else w for w in words]
+                out[key] = ", ".join(w for w in TENANT_PAYS_CHOICES if w in words)
             elif key == "url":
                 text = _text(raw, 2000)
                 # Kept as typed (so a spreadsheet export shows "www.zillow.com"). Only duplicate checks use the
@@ -1270,6 +1281,8 @@ class Store:
                     n = int(round(n))
                     if key == "rating" and not 1 <= n <= 5:
                         raise ValueError("A rating is from 1 to 5.")
+                    if key == "months_up_front" and not 0 <= n <= 12:
+                        raise ValueError("Months of rent due before move-in is a number from 0 to 12.")
                     if key == "fit_score" and not 0 <= n <= 100:
                         raise ValueError("A fit score is from 0 to 100.")
                     if n < 0:

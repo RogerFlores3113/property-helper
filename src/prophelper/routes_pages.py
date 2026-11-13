@@ -24,7 +24,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException, Request
 from fastapi.responses import JSONResponse
 
-from . import backups, commute, enrich, helpers, parsers, paths, scoring, stages, today
+from . import backups, commute, enrich, helpers, parsers, paths, redflags, scoring, stages, today
 from .routes_geocode import lookup_for_anchor
 from .deps import get_store, is_htmx, redirect, render
 from .store import COMMUTE_MODES, NotFound, StageRuleError, Store
@@ -38,7 +38,8 @@ FORM_FIELDS = (
     "utilities_estimate", "year_built", "available_from", "lease_start", "lease_end", "lease_months", "deposit",
     "application_fee", "other_monthly_fees", "move_in_fees", "broker_fee", "hoa", "property_tax", "insurance", "rating", "notes",
     "pet_weight_limit", "pet_count_limit", "pet_breed_note", "pet_deposit", "fenced_yard",
-    "days_on_market", "special_assessment", "special_assessment_payer", "closing_costs", "listing_agent")
+    "days_on_market", "special_assessment", "special_assessment_payer", "closing_costs", "listing_agent",
+    "months_up_front", "tenant_pays")
 
 
 def _form_fields(form: Any, names: tuple[str, ...] = FORM_FIELDS) -> dict[str, str]:
@@ -552,7 +553,8 @@ def _add_page(request: Request, *, values: dict[str, Any] | None = None, parsed:
     store = get_store(request)
     searches = store.list_searches()
     current = store.current_search()
-    return render(request, "add.html", status_code=status, values=values or {}, parsed=parsed, text=text, url=url,
+    flags = redflags.local_flags(values) if parsed and values else []  # the same hints the place page shows, before you save
+    return render(request, "add.html", status_code=status, values=values or {}, parsed=parsed, text=text, url=url, flags=flags,
                   searches=searches, search_options=[(s["id"], s["name"]) for s in searches], chosen=search_id or (current["id"] if current else None), form_error=error,
                   found=sorted((values or {}).keys()) if parsed else [])
 
@@ -573,7 +575,16 @@ async def add_parse(request: Request):
         values["url"] = url
     if text.strip():
         values["listing_text"] = text
+    if not values.get("title") and values.get("address"):
+        values["title"] = str(values["address"]).split(",")[0]
     sid = form.get("search_id")
+    store = get_store(request)
+    try:
+        chosen = store.get_search(int(sid)) if str(sid or "").isdigit() else store.current_search()
+    except NotFound:
+        chosen = store.current_search()
+    if chosen and int(chosen.get("people") or 1) > 1:
+        parsers.app_fee_note_for_people(values, int(chosen["people"]))
     return _add_page(request, values=values, parsed=True, text=text, url=url, search_id=int(sid) if str(sid or "").isdigit() else None)
 
 
