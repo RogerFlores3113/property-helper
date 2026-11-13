@@ -374,9 +374,15 @@ async def search_import_upload(request: Request):
         return redirect("/search", error=str(exc))
     token = share.hold(filename, doc)
     s = doc["search"]
+    shown = get_store(request)
+    new_name = share.imported_name(s.get("name"))
+    report = share.dry_run(doc)
+    left_out = share.left_out_lines({**report, "link_dropped": 0, "places_skipped": report.get("places_skipped", 0),
+                                      "criteria_skipped": report.get("criteria_skipped", 0)})
     return render(request, "share_import.html", token=token, filename=filename, headline=share.preview_text(doc),
-                  mode=str(s.get("mode") or "rent"), criteria=len(doc["criteria"]), anchors=len(doc["anchors"]),
-                  same_name=any(x["name"].lower() == " ".join(str(s.get("name") or "").split()).lower() for x in get_store(request).list_searches(include_archived=True)))
+                  mode=str(s.get("mode") or "rent"), criteria=len(doc["criteria"]) - report.get("criteria_skipped", 0), anchors=len(doc["anchors"]),
+                  new_name=new_name, left_out=left_out,
+                  same_name=any(x["name"].lower() == new_name.lower() for x in shown.list_searches(include_archived=True)))
 
 
 @router.post("/searches/import/apply", include_in_schema=False)
@@ -395,9 +401,7 @@ async def search_import_apply(request: Request):
     share.release(token)
     s = out["search"]
     extra = ""
-    if out["skipped"]:
-        extra += f" {out['skipped']} item{'s' if out['skipped'] != 1 else ''} in the file couldn't be read and were left out."
-    if out["link_dropped"]:
-        extra += f" {out['link_dropped']} listing link{'s were' if out['link_dropped'] != 1 else ' was'} already saved in another search, so those places have no link."
+    extra += "".join(" " + line.replace("will be left out", "were left out").replace("will have", "have").replace("is kept", "was kept").replace("are kept", "were kept")
+                     for line in share.left_out_lines(out))
     return redirect(f"/search?id={s['id']}", notice=f"Added the search '{s['name']}' with {out['places']} place{'s' if out['places'] != 1 else ''}. "
                                                     f"It isn't your current search yet; use Switch to this when you are ready.{extra}")

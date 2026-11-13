@@ -128,7 +128,7 @@ def test_import_round_trip_makes_a_new_search_after_a_preview(client, store):
     data = client.get(f"/search/export.json?id={s['id']}").content
     before = len(store.list_searches())
     r = client.post("/searches/import", files={"file": ("s.json", data, "application/json")})
-    assert r.status_code == 200 and "Adds a search named Fall with 2 places" in r.text
+    assert r.status_code == 200 and "Adds a search named Fall (imported) with 2 places" in r.text
     assert len(store.list_searches()) == before  # preview writes nothing
     token = re.search(r'name="token" value="([^"]+)"', r.text).group(1)
     r2 = client.post("/searches/import/apply", data={"token": token}, follow_redirects=False)
@@ -159,8 +159,7 @@ def test_import_preview_escapes_a_hostile_name(client):
     b"not json", b"[]", b'{"format": "something-else", "version": 1}',
     json.dumps({"format": share.FORMAT_NAME, "search": {"name": "x"}}).encode(),
     json.dumps({"format": share.FORMAT_NAME, "version": 99, "search": {"name": "x"}}).encode(),
-    json.dumps({"format": share.FORMAT_NAME, "version": 1, "search": {"name": ""}, "places": []}).encode(),
-    json.dumps({"format": share.FORMAT_NAME, "version": 1, "search": {"name": "x"}, "places": ["a"]}).encode(),
+    json.dumps({"format": share.FORMAT_NAME, "version": 1, "search": "x", "places": []}).encode(),  # C3: no search at all
     json.dumps({"format": share.FORMAT_NAME, "version": 1, "search": {"name": "x"}, "places": [{}] * 501}).encode(),
 ])
 def test_import_rejects_files_that_are_not_ours(client, store, payload):
