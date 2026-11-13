@@ -145,9 +145,9 @@ def read_table(data: bytes) -> tuple[list[str], list[list[str]]]:
     if not data.strip():
         raise CsvProblem("That file is empty.")
     if data[:2] == b"PK":
-        raise CsvProblem("That looks like an Excel file. In Excel or Numbers choose Save As or Export, then CSV, and upload that.")
+        raise CsvProblem("That looks like an Excel file. In Excel or Numbers choose Save As or Export, then CSV (a spreadsheet file), and upload that.")
     if b"\x00" in data[:4096]:
-        raise CsvProblem("That doesn't look like a CSV (text) file. Save your spreadsheet as CSV and try again.")
+        raise CsvProblem("That doesn't look like a spreadsheet (CSV) file. Save your spreadsheet as CSV and try again.")
     if data.startswith(b"\xef\xbb\xbf"):
         data = data[3:]
     try:
@@ -162,7 +162,7 @@ def read_table(data: bytes) -> tuple[list[str], list[list[str]]]:
     try:
         rows = [r for r in csv.reader(io.StringIO(text, newline=""), delimiter=delimiter)]
     except csv.Error as exc:
-        raise CsvProblem(f"That file couldn't be read as CSV ({exc}).") from None
+        raise CsvProblem(f"That file couldn't be read as a spreadsheet (CSV) ({exc}).") from None
     if len(rows) < 2:
         raise CsvProblem("The file needs a heading row and at least one place under it.")
     headers = [h.strip() for h in rows[0]]

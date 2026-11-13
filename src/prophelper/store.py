@@ -995,7 +995,7 @@ class Store:
         self.get_search(search_id)
         kind = _text(kind, 30).lower()
         if kind not in CRITERION_KINDS:
-            raise ValueError(f"Criterion kinds are: {', '.join(CRITERION_KINDS)}.")
+            raise ValueError(f"The kinds of thing that can matter are: {', '.join(CRITERION_KINDS)}.")
         w = self._weight(weight)
         tgt = _clean_target(kind, target)
         with self._write():
@@ -1013,7 +1013,7 @@ class Store:
         if w is None:
             w = 10.0
         if not 0 <= w <= 100:
-            raise ValueError("A weight is between 0 and 100.")
+            raise ValueError("How much it matters is a number from 0 to 100.")
         return _tidy_num(w)
 
     def get_criterion(self, criterion_id: int) -> dict[str, Any]:
@@ -1058,7 +1058,7 @@ class Store:
         if "name" in fields or not partial:
             name = _text(fields.get("name"), 120)
             if not name:
-                raise ValueError("An anchor needs a name, like 'Campus' or 'Work'.")
+                raise ValueError("An important place needs a name, like 'Campus' or 'Work'.")
             out["name"] = name
         if "address" in fields:
             out["address"] = _text(fields["address"], 300)
@@ -1517,7 +1517,7 @@ class Store:
         self._require_place(place_id)
         crit = self.get_criterion(criterion_id)
         if crit["kind"] != "custom":
-            raise ValueError("Only your own (custom) criteria take a hand-given score.")
+            raise ValueError("Only the things you added yourself take a score you give by hand.")
         n = to_number(score, "score")
         if n is None:
             self._exec("DELETE FROM custom_scores WHERE place_id = ? AND criterion_id = ?", (place_id, criterion_id))

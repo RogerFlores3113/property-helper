@@ -91,9 +91,8 @@ Security deposit $1100. Lease is 12 months.
         "expect": {
             "source": "Craigslist", "price": 1100, "beds": 1, "sqft": 700, "available_from": "2027-08-15", "pets": "cats",
             "address": "905 Linden Court", "dishwasher": 0, "deposit": 1100, "lease_months": 12,
-            "utilities_included": "heat",
+            "utilities_included": "heat", "laundry": "hookups",
         },
-        "absent": ["laundry"],
     },
     {
         "name": "facebook marketplace studio",
@@ -133,9 +132,8 @@ No pets restrictions. Cats and dogs welcome.
         "expect": {
             "source": "Realtor.com", "price": 389900, "beds": 3, "baths": 2.5, "sqft": 1980, "year_built": 1998,
             "address": "3 Orchard Hill Rd", "city": "Champaign", "state": "IL", "zip": "61822", "parking": "garage",
-            "dishwasher": 1, "hoa": 240, "property_tax": 5310, "pets": "both",
+            "dishwasher": 1, "hoa": 240, "property_tax": 5310, "pets": "both", "laundry": "hookups",
         },
-        "absent": ["laundry"],
     },
     {
         "name": "redfin condo with full and half baths",

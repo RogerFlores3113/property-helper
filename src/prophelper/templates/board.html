@@ -22,7 +22,7 @@
 {% if hidden_dealbreaker or hidden_hand %}
 <p class="fine" id="hidden-note">
   {% if show_hidden %}Showing {{ (hidden_dealbreaker + hidden_hand)|num }} hidden place{{ 's' if hidden_dealbreaker + hidden_hand != 1 }}. <a href="/board">Hide them again</a>.
-  {% else %}{{ (hidden_dealbreaker + hidden_hand)|num }} hidden{% if hidden_dealbreaker %} ({{ hidden_dealbreaker|num }} fail a deal-breaker{% if hidden_hand %}, {{ hidden_hand|num }} hidden by you{% endif %}){% endif %}. <a href="/board?show_hidden=1">Show hidden</a>.{% endif %}
+  {% else %}{{ (hidden_dealbreaker + hidden_hand)|num }} hidden{% if hidden_dealbreaker %} ({{ hidden_dealbreaker|num }} miss a must have{% if hidden_hand %}, {{ hidden_hand|num }} hidden by you{% endif %}){% endif %}. <a href="/board?show_hidden=1">Show hidden</a>.{% endif %}
 </p>
 {% endif %}
 <div class="board" id="board" data-board>

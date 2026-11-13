@@ -15,7 +15,7 @@
     <form method="post" action="/ai/test-key" class="inline"><button type="submit" class="linklike">Test key</button></form>
     <span class="fine">(sends the word OK and nothing about this place)</span></div>
   {% endif %}
-  <p class="fine ai-sends">{% if ai['key']['set'] %}Pressing a button sends this place's saved facts, your search criteria, your notes on it, its timeline, the names and roles of people you saved for it, and the listing text you pasted to Anthropic.{% else %}Nothing is sent from here. The prompt you copy holds this place's saved facts, your search criteria, your notes on it, its timeline, the names and roles of people saved for it, and the listing text you pasted.{% endif %} Email addresses and phone numbers are taken out first. The app never sends a message to anyone: drafts are for you to copy.</p>
+  <p class="fine ai-sends">{% if ai['key']['set'] %}Pressing a button sends this place's saved facts, what matters to you in this search, your notes on it, its timeline, the names and roles of people you saved for it, and the listing text you pasted to Anthropic.{% else %}Nothing is sent from here. The prompt you copy holds this place's saved facts, what matters to you in this search, your notes on it, its timeline, the names and roles of people saved for it, and the listing text you pasted.{% endif %} Email addresses and phone numbers are taken out first. The app never sends a message to anyone: drafts are for you to copy.</p>
   {% if not ai.has_listing %}
   <p class="flash warn" role="status">No listing text is saved for this place, so answers will only use the facts you typed. Paste the listing text when you add a place to get better help.</p>
   {% endif %}

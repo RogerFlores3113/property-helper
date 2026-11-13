@@ -35,7 +35,7 @@
 </section>
 {% endif %}
 {% if no_criteria and place_count %}
-<section class="card"><h2>Tell me what you want</h2><p>This search has no criteria yet, so places can't be scored. <a href="/search#criteria">Add a few criteria</a>.</p></section>
+<section class="card"><h2>Tell me what you want</h2><p>This search doesn't say what matters to you yet, so places can't be scored. <a href="/search#criteria">Add a few things that matter</a>.</p></section>
 {% endif %}
 
 {% if fits %}
@@ -47,12 +47,12 @@
       <span class="item-sub">{{ p.stage }}{% if p.cost_total %} &middot; about {{ p.cost_total|money }} a month{% endif %}{% if p.score.unknown %} &middot; {{ p.score.unknown|length }} thing{{ 's' if p.score.unknown|length != 1 }} still to check{% endif %}</span></div></li>
     {% endfor %}
   </ol>
-  <p class="fine">The highest scores among places that meet every deal-breaker. <a href="/board">See the whole board</a>.</p>
+  <p class="fine">The highest scores among places that have every must have. <a href="/board">See the whole board</a>.</p>
 </section>
 {% elif place_count and not no_criteria %}
 <section class="card" aria-labelledby="fits-h">
   <h2 id="fits-h">Best fits right now</h2>
-  <p class="fine">No place fits yet. Places that miss a deal-breaker or look risky stay on the <a href="/board">board</a>, not here.</p>
+  <p class="fine">No place fits yet. Places that miss a must have or look risky stay on the <a href="/board">board</a>, not here.</p>
 </section>
 {% endif %}
 
@@ -104,7 +104,7 @@
       <span class="item-sub">{% if p.price %}{{ p.price|money }}{% else %}No price yet{% endif %}{% if p.beds is not none %} &middot; {{ p.beds|beds }}{% endif %}</span></div></li>
     {% endfor %}
   </ul>
-  <p class="fine">Places you haven't opened yet. Ones that miss a deal-breaker or look risky are left out here and stay on the board.</p>
+  <p class="fine">Places you haven't opened yet. Ones that miss a must have or look risky are left out here and stay on the board.</p>
   {% else %}<p class="fine">Nothing new. Places you or an AI app add show up here until you open them.</p>{% endif %}
 </section>
 </div>

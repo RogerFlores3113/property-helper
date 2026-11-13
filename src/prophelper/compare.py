@@ -254,7 +254,7 @@ def build_rows(places: list[dict[str, Any]]) -> list[dict[str, Any]]:
                 cells.append(_cell(f"{pct}%" + (" (fails)" if item.get("dealbreaker_status") == "fail" else ""), float(pct)))
         score_rows.append(_row("score-" + label, label, cells, "high"))
     score_rows.append(_row("unknown", "Still unknown", [_plain(", ".join(unknown_list(p)) or "nothing, everything is filled in") for p in places]))
-    section("Score, criterion by criterion", score_rows)
+    section("Score, one thing at a time", score_rows)
     return sections
 
 

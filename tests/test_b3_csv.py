@@ -107,7 +107,7 @@ def test_apply_fills_only_empty_fields_of_a_match(store, setup):
 
 def test_bad_files_get_plain_errors(store, setup):
     c = local_client(store)
-    for body, words in [("", "empty"), ("Title\n", "at least one place"), (b"PK\x03\x04zzzz", "Excel"), (b"a,b\n\x00\x01,2\n", "look like a CSV")]:
+    for body, words in [("", "empty"), ("Title\n", "at least one place"), (b"PK\x03\x04zzzz", "Excel"), (b"a,b\n\x00\x01,2\n", "look like a spreadsheet (CSV)")]:
         r = upload(c, body, setup["id"])
         assert r.status_code == 400 and words in r.text, (body, r.text[:300])
     assert c.post("/import", data={}).status_code == 400  # no file

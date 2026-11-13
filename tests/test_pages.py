@@ -85,7 +85,7 @@ def test_board_has_a_column_per_stage_and_hides_dealbreakers(client, sample_stor
     html = client.get("/board").text
     for stage in ("Saved", "Contacted", "Tour booked", "Toured", "Applied", "Approved", "Lease signed", "Passed"):
         assert f'data-stage="{stage}"' in html
-    assert "Show hidden" in html and "fail a deal-breaker" in html
+    assert "Show hidden" in html and "miss a must have" in html
     shown = client.get("/board?show_hidden=1").text
     assert shown.count('class="card kcard"') > html.count('class="card kcard"')
     assert "Hide them again" in shown

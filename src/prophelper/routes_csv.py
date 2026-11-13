@@ -76,7 +76,7 @@ async def import_upload(request: Request):
     except NotFound:
         return _upload_page(request, status=400, error="That search doesn't exist.")
     if upload is None or not hasattr(upload, "read"):
-        return _upload_page(request, status=400, error="Choose a CSV file first.", chosen=search_id)
+        return _upload_page(request, status=400, error="Choose a spreadsheet (CSV) file first.", chosen=search_id)
     data = await upload.read()
     if len(data) > FILE_LIMIT:
         return _upload_page(request, status=413, error="That file is bigger than 5 MB. Split it and try again.", chosen=search_id)
