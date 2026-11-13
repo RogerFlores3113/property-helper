@@ -59,6 +59,7 @@ DEFAULT_CHECKLIST: tuple[tuple[str, str], ...] = (
 DEFAULT_SETTINGS: dict[str, str] = {
     "ai_model": "claude-sonnet-5-5", "follow_up_days": "3", "map_tiles": "1", "geocode": "0", "show_photos": "0",
     "strict_scraping": "0", "down_payment_pct": "20", "mortgage_rate": "6.5", "loan_years": "30", "pmi_rate_pct": "0.5",
+    "closing_cost_pct": "3",
 }
 DEFAULT_CHECKLIST_BUY: tuple[tuple[str, str], ...] = (
     ("Mortgage pre-approval letter", "From your lender. Sellers expect one with an offer"),
@@ -84,11 +85,11 @@ OPINION_NOTE_MAX = 500
 
 PLACE_TEXT = ("title", "address", "unit", "city", "state", "zip", "url", "source", "listing_text", "laundry", "parking",
               "pets", "utilities_included", "available_from", "lease_start", "lease_end", "notes", "ai_notes",
-              "fit_notes", "red_flags", "pet_breed_note")
+              "fit_notes", "red_flags", "pet_breed_note", "special_assessment_payer", "listing_agent")
 PLACE_REAL = ("lat", "lng", "price", "beds", "baths", "parking_cost", "pet_rent", "pet_fee", "utilities_estimate", "pet_weight_limit", "pet_deposit",
               "deposit", "application_fee", "other_monthly_fees", "move_in_fees", "broker_fee", "hoa", "property_tax",
-              "insurance")
-PLACE_INT = ("sqft", "year_built", "lease_months", "rating", "fit_score", "pet_count_limit")
+              "insurance", "special_assessment", "closing_costs")
+PLACE_INT = ("sqft", "year_built", "lease_months", "rating", "fit_score", "pet_count_limit", "days_on_market")
 PLACE_DATES = ("available_from", "lease_start", "lease_end")
 PLACE_FIELDS: tuple[str, ...] = (PLACE_TEXT + PLACE_REAL + PLACE_INT + ("photo_urls", "dishwasher", "fenced_yard", "hidden", "is_sample"))
 # What a form or the AI may set (stage goes through move_stage).
@@ -341,7 +342,17 @@ CREATE TABLE IF NOT EXISTS place_opinions (
 );
 """
 
-_MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2_PLACE_DATES, _MIGRATION_PEOPLE, _MIGRATION_PETS_APPLY, _MIGRATION_OPINIONS]
+# Buyer facts on a place (days on market, one-time special assessment and who pays it, closing costs, listing agent).
+# One self-contained step so it can be renumbered at merge time.
+_MIGRATION_BUYER_FIELDS = """
+ALTER TABLE places ADD COLUMN days_on_market INTEGER;
+ALTER TABLE places ADD COLUMN special_assessment REAL;
+ALTER TABLE places ADD COLUMN special_assessment_payer TEXT NOT NULL DEFAULT '';
+ALTER TABLE places ADD COLUMN closing_costs REAL;
+ALTER TABLE places ADD COLUMN listing_agent TEXT NOT NULL DEFAULT '';
+"""
+
+_MIGRATIONS: list[str] = [_SCHEMA_V1, _SCHEMA_V2_PLACE_DATES, _MIGRATION_PEOPLE, _MIGRATION_PETS_APPLY, _MIGRATION_OPINIONS, _MIGRATION_BUYER_FIELDS]
 
 
 class NotFound(LookupError):
@@ -904,7 +915,7 @@ class Store:
     def buy_settings(self) -> dict[str, str]:
         """down_payment_pct, mortgage_rate, loan_years and pmi_rate_pct as saved (text), for :mod:`money`."""
         s = self.all_settings()
-        return {k: s[k] for k in ("down_payment_pct", "mortgage_rate", "loan_years", "pmi_rate_pct")}
+        return {k: s[k] for k in ("down_payment_pct", "mortgage_rate", "loan_years", "pmi_rate_pct", "closing_cost_pct")}
 
     # ------------------------------------------------------------------ searches
     def _search_values(self, fields: dict[str, Any], partial: bool) -> dict[str, Any]:
@@ -1227,6 +1238,12 @@ class Store:
                 out[key] = clean_enum(key, raw)
             elif key in PLACE_DATES:
                 out[key] = clean_date(raw, key.replace("_", " "))
+            elif key == "special_assessment_payer":
+                word = " ".join(str(raw or "").lower().split())
+                word = {"the seller": "seller", "the buyer": "buyer", "you": "buyer", "unknown": "", "not sure": ""}.get(word, word)
+                if word not in ("", "seller", "buyer"):
+                    raise ValueError("Who pays a special assessment is seller or buyer.")
+                out[key] = word
             elif key == "url":
                 text = _text(raw, 2000)
                 # Kept as typed (so a spreadsheet export shows "www.zillow.com"). Only duplicate checks use the

@@ -1,6 +1,6 @@
 {# Inputs for a criterion's target. `kind` and `t` (a dict, may be empty) and `pre` (an id prefix) come from the includer. #}
 {% if kind == 'price' %}
-<div class="field"><label for="{{ pre }}-max">Most per month</label><input id="{{ pre }}-max" name="t_max" type="number" step="any" value="{{ t.get('max', '') }}"></div>
+<div class="field"><label for="{{ pre }}-max">{{ "Most you'd pay for the home" if search_mode == 'buy' else 'Most per month, all in' }}</label><input id="{{ pre }}-max" name="t_max" type="number" step="any" value="{{ t.get('max', '') }}"></div>
 {% elif kind in ('beds', 'baths', 'sqft') %}
 <div class="field"><label for="{{ pre }}-min">At least</label><input id="{{ pre }}-min" name="t_min" type="number" step="any" value="{{ t.get('min', '') }}"></div>
 {% elif kind == 'commute' %}

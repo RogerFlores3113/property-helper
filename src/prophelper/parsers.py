@@ -39,7 +39,7 @@ _MONTHS = {m: i for i, m in enumerate(["jan", "feb", "mar", "apr", "may", "jun",
 _STATES = frozenset("AL AK AZ AR CA CO CT DE DC FL GA HI ID IL IN IA KS KY LA ME MD MA MI MN MS MO MT NE NV NH NJ NM NY NC ND OH OK "
                     "OR PA RI SC SD TN TX UT VT VA WA WV WI WY PR".split())
 _STREET = (r"(?:st|street|ave|avenue|rd|road|dr|drive|blvd|boulevard|ln|lane|ct|court|pl|place|way|cir|circle|pkwy|parkway|"
-           r"ter|terrace|trl|trail|hwy|highway|loop|plaza|pike|sq(?=\b\.?,)|square(?=\b,))")
+           r"ter|terrace|trl|trail|hwy|highway|loop|plaza|pike|(?:row|walk|alley|path|mews)(?![ \t]+(?:ln|lane|st|street|ave|avenue|rd|road|dr|drive|blvd|boulevard|ct|court|pl|place|way|cir|circle|ter|terrace|trl|trail|pkwy|parkway)\b)|sq(?=\b\.?,)|square(?=\b,))")
 _NOT_STREET_WORDS = {"bed", "beds", "bedroom", "bedrooms", "bath", "baths", "bathroom", "bathrooms", "br", "ba", "bd", "bds", "sq",
                      "ft", "sqft", "month", "mo", "year", "years", "min", "minute", "minutes", "mile", "miles", "unit", "units",
                      "floor", "floors", "car", "cars", "pet", "pets", "story", "stories", "block", "blocks", "min."}
@@ -490,6 +490,27 @@ def _insurance(text: str) -> float | None:
     return round(value, 2) if 100 <= value <= 100000 else None
 
 
+def _special_assessment_facts(text: str) -> tuple[float | None, str, str]:
+    """(one-time amount or None, payer "seller" / "buyer" / "", the matching sentence) for a special assessment.
+    An amount quoted per month is left out of the amount (it is not one-time), but the sentence still comes back."""
+    if re.search(r"\bno (?:known |pending |current )?special assessments?\b", text, re.I):
+        return None, "", ""
+    sentence = None
+    for m in re.finditer(r"[^.\n]*\bspecial assessments?\b[^.\n]*", text, re.I):
+        sentence = m.group(0)
+        if re.search(r"\$\s?\d", sentence):
+            break
+    if sentence is None:
+        return None, "", ""
+    am = re.search(r"\$\s?(\d{1,3}(?:,\d{3})+|\d+)(?!\d)(?!,\d)(?!\s*(?:/\s*mo|per month|monthly|a month))", sentence)
+    payer = ""
+    if re.search(r"\bseller\b[^.\n]{0,25}\b(?:pays?|paid|to pay|responsible|covers?|credit)\b|\bpaid (?:in full )?by (?:the )?seller|\bseller[- ]paid", sentence, re.I):
+        payer = "seller"
+    elif re.search(r"\bbuyer\b[^.\n]{0,25}\b(?:pays?|assumes?|to pay|responsible|takes?|inherits?|covers?)\b|\bpaid by (?:the )?buyer|\bassumed by (?:the )?buyer|\bbuyer[- ]paid", sentence, re.I):
+        payer = "buyer"
+    return (_num(am.group(1)) if am else None), payer, sentence
+
+
 def _special_assessment(text: str) -> str:
     """A plain line about a special assessment: the amount and who pays it."""
     if re.search(r"\bno (?:known |pending |current )?special assessments?\b", text, re.I):
@@ -511,6 +532,53 @@ def _special_assessment(text: str) -> str:
     if am:
         return f"Special assessment ${_num(am.group(1)):,.0f}: {who}."
     return f"A special assessment is mentioned but no amount is given: {who}."
+
+
+def _days_on_market(text: str) -> int | None:
+    """"41 days on Zillow", "Days on market: 41", "Time on Redfin 41 days"."""
+    site = r"(?:zillow|redfin|realtor(?:\.com)?|trulia|homes\.com|the market|market|site)"
+    for pat in (r"\b(\d{1,4})\s+days?\s+on\s+" + site, r"\bdays?\s+on\s+(?:market|" + site + r")\s*[:\-]?\s*(\d{1,4})\b",
+                r"\btime\s+on\s+" + site + r"\s*[:\-]?\s*(\d{1,4})\s+days?"):
+        m = re.search(pat, text, re.I)
+        if m:
+            return int(m.group(1))
+    return None
+
+
+_NOT_AN_AGENT = re.compile(r"^(?:the\s+)?(?:owner|property manage\w*|landlord|private|seller|you)\b", re.I)
+
+
+def _listing_agent(text: str) -> str:
+    """The listing agent and company from "Listed by Jane Q. Agent, Example Realty" (phone numbers and licence numbers dropped)."""
+    m = re.search(r"\b(?:listed by|listing agent|listing provided by|listing courtesy of|presented by)\s*[:\-]?[ \t]*([^\n]{3,140})", text, re.I)
+    if not m:
+        return ""
+    line = re.sub(r"\(?\+?\d[\d\s().-]{6,}\d\)?", " ", m.group(1))
+    line = re.sub(r"\b(?:DRE|license|lic|BRE|MLS)\b[ \t#:.]*[\w-]*", " ", line, flags=re.I)
+    line = re.sub(r"\s*[\u2022\u00b7|]\s*", ", ", line)
+    line = " ".join(line.split()).strip(" ,;:-")
+    if len(line) < 3 or _NOT_AN_AGENT.match(line) or re.search(r"https?://|@", line):
+        return ""
+    return line[:120]
+
+
+def _estimated_payment(text: str) -> float | None:
+    """What the listing itself estimates per month ("Est. payment $2,310/mo"), or None."""
+    m = re.search(r"\b(?:est(?:imated|\.)?\s*(?:monthly\s*)?(?:payment|mortgage)|monthly payment|payment estimate)\s*[:\-]?\s*(?:is\s*)?(?:about |around |from )?\$\s?(\d{1,3}(?:,\d{3})+|\d+)", text, re.I)
+    if not m:
+        m = re.search(r"\$\s?(\d{1,3}(?:,\d{3})+|\d+)\s*(?:/\s*mo(?:nth)?|per month|a month)?\s*(?:est\.?|estimated)\s*(?:payment|mortgage)", text, re.I)
+    if not m:
+        return None
+    value = _num(m.group(1))
+    return value if 200 <= value <= 60000 else None
+
+
+def listing_estimated_payment(text: str) -> float | None:
+    """Public: the monthly payment a pasted listing quotes for itself, or None. Never raises."""
+    try:
+        return _estimated_payment(_tidy(text or ""))
+    except Exception:
+        return None
 
 
 _UTILITY_WORDS = ("water", "sewer", "trash", "gas", "electric", "heat", "internet", "wifi", "cable", "hot water")
@@ -921,6 +989,20 @@ def parse_listing(text: str = "", url: str = "") -> dict[str, Any]:
         assessment = _try(lambda: _special_assessment(text))
         if assessment:
             facts.append(assessment)
+        amount, payer, _sentence = _try(lambda: _special_assessment_facts(text)) or (None, "", "")
+        if amount:
+            put("special_assessment", amount)
+            if payer:
+                put("special_assessment_payer", payer)
+        dom = _try(lambda: _days_on_market(text))
+        if dom is not None:
+            put("days_on_market", dom)
+        agent = _try(lambda: _listing_agent(text))
+        if agent:
+            put("listing_agent", agent)
+        est = _try(lambda: _estimated_payment(text))
+        if est:
+            facts.append(f"The listing estimates the payment at ${est:,.0f}/mo.")
         hoa = _try(lambda: _hoa(text))
         if hoa is not None:
             put("hoa", hoa)

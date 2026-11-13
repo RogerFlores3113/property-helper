@@ -64,6 +64,8 @@ def test_migration_adds_place_dates_to_an_old_database(tmp_path):
         con.execute(f"ALTER TABLE searches DROP COLUMN {col}")
     con.execute("DROP TABLE place_opinions")
     con.execute("ALTER TABLE searches DROP COLUMN people_names")
+    for col in ("days_on_market", "special_assessment", "special_assessment_payer", "closing_costs", "listing_agent"):
+        con.execute(f"ALTER TABLE places DROP COLUMN {col}")  # nor the buyer fields added in the later step
     con.execute("PRAGMA user_version = 1")
     con.commit()
     con.close()

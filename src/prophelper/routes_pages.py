@@ -37,7 +37,8 @@ FORM_FIELDS = (
     "sqft", "laundry", "dishwasher", "parking", "parking_cost", "pets", "pet_rent", "pet_fee", "utilities_included",
     "utilities_estimate", "year_built", "available_from", "lease_start", "lease_end", "lease_months", "deposit",
     "application_fee", "other_monthly_fees", "move_in_fees", "broker_fee", "hoa", "property_tax", "insurance", "rating", "notes",
-    "pet_weight_limit", "pet_count_limit", "pet_breed_note", "pet_deposit", "fenced_yard")
+    "pet_weight_limit", "pet_count_limit", "pet_breed_note", "pet_deposit", "fenced_yard",
+    "days_on_market", "special_assessment", "special_assessment_payer", "closing_costs", "listing_agent")
 
 
 def _form_fields(form: Any, names: tuple[str, ...] = FORM_FIELDS) -> dict[str, str]:

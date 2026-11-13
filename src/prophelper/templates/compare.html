@@ -56,7 +56,7 @@
       <legend>Choose 2 to 4 places{% if search %} from {{ search.name }}{% endif %}</legend>
       {% for o in options %}
       <div class="checks"><input id="pick-{{ o.id }}" type="checkbox" name="ids" value="{{ o.id }}"{% if o.id in picked %} checked{% endif %}>
-        <label for="pick-{{ o.id }}">{{ o.title }} <span class="fine">{{ o.stage }}{% if o.price %}, {{ o.price|money }}/mo listed{% endif %}</span></label></div>
+        <label for="pick-{{ o.id }}">{{ o.title }} <span class="fine">{{ o.stage }}{% if o.price %}, {% if search and search.mode == 'buy' %}{{ o.price|money }} price{% else %}{{ o.price|money }}/mo listed{% endif %}{% endif %}</span></label></div>
       {% endfor %}
     </fieldset>
     <p>{{ button("Compare these places", kind="primary") }}</p>
