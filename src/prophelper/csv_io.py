@@ -31,7 +31,11 @@ EXPORT_COLUMNS: list[tuple[str, str]] = [
     ("Deposit", "deposit"), ("Application fee", "application_fee"), ("Parking cost", "parking_cost"), ("Pet rent", "pet_rent"),
     ("Pet fee", "pet_fee"), ("Utilities estimate", "utilities_estimate"), ("Other monthly fees", "other_monthly_fees"),
     ("Move in fees", "move_in_fees"), ("Broker fee", "broker_fee"), ("HOA", "hoa"), ("Property tax", "property_tax"),
-    ("Insurance", "insurance"), ("Year built", "year_built"), ("Latitude", "lat"), ("Longitude", "lng"),
+    ("Insurance", "insurance"), ("Year built", "year_built"),
+    ("Heaviest pet allowed (lb)", "pet_weight_limit"), ("Pet count limit", "pet_count_limit"), ("Breed rules", "pet_breed_note"),
+    ("Pet deposit (refundable)", "pet_deposit"), ("Fenced yard", "fenced_yard"), ("Days on market", "days_on_market"),
+    ("Special assessment", "special_assessment"), ("Who pays the special assessment", "special_assessment_payer"),
+    ("Closing costs", "closing_costs"), ("Listing agent", "listing_agent"), ("Latitude", "lat"), ("Longitude", "lng"),
     ("Rating", "rating"), ("Fit score", "fit_score"), ("Red flags", "red_flags"), ("Notes", "notes"),
 ]
 EXPORT_ONLY = {"fit_score", "red_flags"}  # written on export, never read back (the AI and the local check own them)
@@ -54,10 +58,13 @@ _EXTRA_NAMES: dict[str, tuple[str, ...]] = {
     "lease_months": ("lease length", "lease term", "term", "lease months"),
     "deposit": ("security deposit",), "application_fee": ("app fee", "application"),
     "parking_cost": ("parking fee", "parking rent"), "pet_rent": ("monthly pet rent", "pet fee monthly", "pet rent per month", "pet rent monthly", "pet rent mo", "pet monthly"),
-    "pet_fee": ("pet deposit", "one time pet fee", "pet fee one time", "pet fee onetime", "pet charge", "pet deposit fee"), "utilities_estimate": ("estimated utilities", "utility estimate", "utilities cost"),
+    "pet_fee": ("one time pet fee", "pet fee one time", "pet fee onetime", "pet charge", "pet deposit fee"), "utilities_estimate": ("estimated utilities", "utility estimate", "utilities cost"),
     "other_monthly_fees": ("monthly fees", "other fees", "fees per month"),
     "hoa": ("hoa fee", "hoa dues", "hoa monthly"), "property_tax": ("tax", "taxes", "property taxes"),
-    "year_built": ("built", "year"), "lat": ("latitude",), "lng": ("lon", "long", "longitude"),
+    "year_built": ("built", "year"), "pet_weight_limit": ("pet weight limit", "weight limit", "pet weight", "max pet weight"),
+    "pet_count_limit": ("pet limit", "max pets", "number of pets"), "pet_breed_note": ("breed restrictions", "breed rules", "breeds"),
+    "fenced_yard": ("fenced", "fence", "fenced in yard"), "days_on_market": ("dom", "days listed"),
+    "special_assessment_payer": ("special assessment paid by", "assessment payer"), "listing_agent": ("agent", "realtor"), "lat": ("latitude",), "lng": ("lon", "long", "longitude"),
     "rating": ("stars", "my rating"), "notes": ("note", "comments", "comment", "my notes"),
 }
 
@@ -77,12 +84,28 @@ def _build_synonyms() -> dict[str, str]:
         table.setdefault(_norm_header(field), field)
     for dropped in ("listing_text", "photo_urls", "hidden", "is_sample", "ai_notes", "fit_notes", "lease_start", "lease_end"):
         table.pop(_norm_header(dropped), None)
+    table["pet deposit"] = "pet_fee"  # older sheets (and the first versions of this app) call the one-time pet fee a deposit
     return table
 
 
 SYNONYMS = _build_synonyms()
 # What a column may be matched to (a field you can fill from a spreadsheet), with the words shown in the picker.
 FIELD_LABELS: dict[str, str] = {f: h for h, f in EXPORT_COLUMNS if f not in EXPORT_ONLY}
+
+
+# ----------------------------------------------------------------------------- plain words for codes
+# The file says "In the unit", not in_unit. Import takes these words and the old codes (the store knows the codes).
+PLAIN_WORDS: dict[str, dict[str, str]] = {
+    "laundry": {"in_unit": "In the unit", "in_building": "In the building", "hookups": "Hookups only", "none": "None"},
+    "parking": {"garage": "Garage", "covered": "Covered", "lot": "Lot", "street": "Street", "none": "None"},
+    "pets": {"cats": "Cats", "dogs": "Dogs", "both": "Cats and dogs", "none": "No pets"},
+}
+_FROM_PLAIN: dict[str, dict[str, str]] = {f: {_norm_header(w): code for code, w in words.items()} for f, words in PLAIN_WORDS.items()}
+
+
+def _code_for(field: str, text: str) -> str:
+    """The stored code for a plain word from our own export ("Hookups only" becomes hookups); anything else is passed on."""
+    return _FROM_PLAIN.get(field, {}).get(_norm_header(text), text)
 
 
 # ----------------------------------------------------------------------------- export
@@ -123,8 +146,10 @@ def export_csv(places: list[dict[str, Any]], anchors: list[dict[str, Any]] | Non
         row = []
         for _, field in EXPORT_COLUMNS:
             v = p.get(field)
-            if field == "dishwasher":
+            if field in ("dishwasher", "fenced_yard"):
                 v = "" if v is None else ("yes" if v else "no")
+            elif field in PLAIN_WORDS:
+                v = PLAIN_WORDS[field].get(str(v), v) if v else ""
             row.append(_safe_cell(_plain(v)))
         total = p.get("cost_total")
         row.append(_plain(total))
@@ -241,7 +266,7 @@ def plan_import(store: Store, search_id: int, headers: list[str], rows: list[lis
             if field == "stage" or text.lower() in _UNSET:
                 continue
             try:
-                values.update(store._clean_place({field: text}, partial=True))  # checks one cell; touches no data
+                values.update(store._clean_place({field: _code_for(field, text)}, partial=True))  # checks one cell; touches no data
             except ValueError as exc:
                 item["warnings"].append(_cell_problem(field, exc))
         if raw.get("stage"):
