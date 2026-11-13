@@ -83,7 +83,8 @@ def test_unset_pet_rent_and_parking_are_not_known_not_zero(store):
 
 
 def test_pets_none_is_a_real_zero(store):
-    s = _search(store)
+    # The search has a cat, so pet rent counts (with no pets it is left out of the cost entirely).
+    s = _search(store, pet_kind="cat")
     a, _ = store.add_place(search_id=s["id"], title="A", address="1 A St", price=1500, pet_rent=40, pets="cats")
     b, _ = store.add_place(search_id=s["id"], title="B", address="2 B St", price=1500, pets="none")
     pet = _row(compare.build_rows(_enriched(store, s, a["id"], b["id"])), "cost-pet_rent")
