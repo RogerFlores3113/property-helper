@@ -26,7 +26,7 @@ from fastapi.responses import FileResponse
 from starlette.background import BackgroundTask
 from starlette.formparsers import MultiPartParser
 
-from . import ai_key, backups, paths
+from . import ai_key, backups, geocode, paths
 from .deps import get_store, redirect, render
 from .sample_data import load_sample_data
 from .store import STRICT_ADDS_PER_CALL, STRICT_ADDS_PER_HOUR, Store
@@ -213,7 +213,8 @@ def privacy_page(request: Request):
     store = get_store(request)
     return render(request, "privacy.html", data_folder=str(paths.data_dir()), key=ai_key.key_status(),
                   map_tiles=store.get_setting_bool("map_tiles", True), geocode=store.get_setting_bool("geocode"),
-                  show_photos=store.get_setting_bool("show_photos"))
+                  show_photos=store.get_setting_bool("show_photos"), geocode_agent=geocode.USER_AGENT,
+                  ai_model=store.get_setting("ai_model"))
 
 
 # --------------------------------------------------------------------------- downloads

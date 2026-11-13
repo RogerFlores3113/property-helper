@@ -73,6 +73,9 @@
     {% if key.source == 'file' %}
     <form method="post" action="/settings/ai-key/remove" style="margin-top:.6rem">{{ button("Remove saved key", kind="danger", small=True) }}</form>
     {% endif %}
+    {% if key['set'] %}
+    <form method="post" action="/ai/test-key" style="margin-top:.6rem">{{ button("Test key", small=True, title="Sends the word OK to Anthropic and nothing about your places") }} <span class="fine">Sends the word OK and nothing about your places, to check that the key and model work.</span></form>
+    {% endif %}
     <form method="post" action="/settings" class="stack" style="margin-top:1rem">
       <div class="field">
         <label for="ai_model">Which Claude model the app asks</label>

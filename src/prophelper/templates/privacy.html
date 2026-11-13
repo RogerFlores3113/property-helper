@@ -24,8 +24,24 @@
   <p>Only three things can use the network, and each is yours to control:</p>
   <ol class="privacy-list">
     <li><strong>Map tiles</strong> (the pictures of the map). When you open the Map page, your browser loads them from OpenStreetMap (<code>tile.openstreetmap.org</code>). They are loaded by your browser, so OpenStreetMap sees the area you look at and your network address. Now: <strong>{{ 'on' if map_tiles else 'off' }}</strong>. <a href="/settings#map">Change it in Settings</a>; with tiles off the map shows places on a plain background.</li>
-    <li><strong>Address lookup</strong> ("Find map locations for addresses"). Off unless you turn it on. When on, the street address of a place without a map point is sent to OpenStreetMap Nominatim, at most one request per second, with a generic user agent that names no one. Now: <strong>{{ 'on' if geocode else 'off' }}</strong>.</li>
-    <li><strong>AI calls to Anthropic</strong>. Only when you saved your own Anthropic key and press an AI button. {% if key['set'] %}A key is saved ({{ key.hint }}).{% else %}No key is set, so nothing is sent: each AI button just gives you text to copy.{% endif %} The request goes straight from this computer to <code>api.anthropic.com</code>. It sends the one place you asked about (its facts, your search's criteria and the notes of that place) and nothing else, never your key, your other places or your data folder.</li>
+    <li><strong>Address lookup</strong> ("Find map locations for addresses"). Off unless you turn it on. It uses OpenStreetMap Nominatim, and only runs when you press a Find button on a place or an anchor. Now: <strong>{{ 'on' if geocode else 'off' }}</strong>. One lookup sends this to <code>nominatim.openstreetmap.org</code>:
+      <ul>
+        <li>the street address, city, state and ZIP of that one place, as the search words (not its name, unit, notes, listing text or rating);</li>
+        <li>the request options <code>format=json</code> and <code>limit=1</code>;</li>
+        <li>a generic user agent, <code>{{ geocode_agent }}</code>, which names this app and no person or computer;</li>
+        <li>and, as with any web request, your network address.</li>
+      </ul>
+      At most one request goes out per second, with a 10 second timeout. The answer (a point on the map and a name) is saved with the place.</li>
+    <li><strong>AI calls to Anthropic</strong>. Only when you saved your own Anthropic key and press an AI button (or the Test key button). {% if key['set'] %}A key is saved ({{ key.hint }}).{% else %}No key is set, so nothing is sent: each AI button just gives you a prompt to copy.{% endif %} The request goes straight from this computer to <code>api.anthropic.com</code> using the model <code>{{ ai_model }}</code>. Pressing a place's AI button sends:
+      <ul>
+        <li>the place's saved facts, your notes on it and its timeline;</li>
+        <li>your search's criteria;</li>
+        <li>the names and roles of people you saved for that place (their email addresses and phone numbers are taken out first);</li>
+        <li>the listing text you pasted for that place;</li>
+        <li>for a message draft, the purpose you chose (availability, questions, tour or follow-up);</li>
+        <li>and your key, as the sign-in for that request.</li>
+      </ul>
+      It never sends your other places, your documents, or your data folder. The "Show what will be sent" box on the place page shows the exact text before you press. The Test key button sends only the word OK. The app never sends a message to anyone for you: drafts are for you to copy.</li>
   </ol>
   <ul class="privacy-list">
     <li>No telemetry, no analytics, no update checks, no advertising.</li>

@@ -48,7 +48,7 @@ CSP = CSP_TEMPLATE.format(img=f"'self' data: {TILES}")
 CSP_PHOTOS = CSP_TEMPLATE.format(img=f"'self' data: {TILES} https:")
 # Page modules that other parts of the app add. A missing one is skipped, so the app runs while they are being built.
 OPTIONAL_ROUTERS = ("routes_map", "routes_calendar", "routes_compare", "routes_contacts", "routes_documents",
-                    "routes_checklist", "routes_ai", "routes_csv", "routes_extra")
+                    "routes_checklist", "routes_ai", "routes_csv", "routes_geocode", "routes_extra")
 LOCKED = "Double-click Start Property Helper again (or open the app icon, or run: prophelper open) to unlock this window."
 LOCKED_LOG = ("A browser window asked for a page while locked. To unlock it, double-click Start Property Helper again "
               "(or open the app icon, or run: prophelper open)")
