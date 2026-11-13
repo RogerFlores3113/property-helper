@@ -61,8 +61,12 @@ async def main(exe: str | None) -> None:
             listed = await s.call_tool("list_places", {})
             assert not listed.isError and listed.structuredContent["total"] == 1, listed
 
-            moved = await s.call_tool("move_place", {"place_id": place_id, "stage": "Toured"})
+            skipped = await s.call_tool("move_place", {"place_id": place_id, "stage": "Toured"})
+            assert skipped.isError and "one stage at a time" in skipped.content[0].text, skipped  # one step at a time
+            moved = await s.call_tool("move_place", {"place_id": place_id, "stage": "Contacted"})
             assert not moved.isError, moved
+            won = await s.call_tool("move_place", {"place_id": place_id, "stage": "Lease signed"})
+            assert not won.isError and "Ask the user to do this in the app" in won.content[0].text, won
             backward = await s.call_tool("move_place", {"place_id": place_id, "stage": "Saved"})
             assert backward.isError and "forward or to Passed" in backward.content[0].text, backward
             notes = await s.call_tool("add_place", {"title": "x", "notes": "mine"})

@@ -286,7 +286,9 @@ def _unknown_list(e: dict[str, Any]) -> list[str]:
 
 
 def _unknown_text(e: dict[str, Any]) -> str:
-    return _labs(_unknown_list(e))
+    """Criterion labels (outside text, fenced) and the money items the app itself names."""
+    parts = [_lab(x) for x in e["score"]["unknown"]] + [m for m in e["cost"]["missing"] if m not in e["score"]["unknown"]]
+    return ", ".join(dict.fromkeys(parts))
 
 
 def _commute_list(e: dict[str, Any]) -> list[str]:
@@ -315,7 +317,7 @@ def _line(e: dict[str, Any], search: dict[str, Any] | None = None) -> str:
     if c:
         bits.append(c)
     if e["score"]["fails_dealbreaker"]:
-        bits.append("FAILS " + ", ".join(e["score"]["failed"]))
+        bits.append("FAILS " + _labs(e["score"]["failed"]))
     if e["flags"]:
         bits.append(f"{len(e['flags'])} thing{'s' if len(e['flags']) != 1 else ''} to check (possible scam signs)")
     if e.get("is_sample"):
