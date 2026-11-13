@@ -13,6 +13,7 @@ def test_sample_loads_and_marks_everything(store):
 
 def test_sample_shows_the_interesting_cases(sample_store):
     s = sample_store
+    s.update_search(s.current_search()["id"], hide_dealbreakers=True)
     search = s.current_search()
     rows = {p["title"]: p for p in enrich.enrich_places(s, search)}
     scam = rows["Bright Lakeview Condo"]

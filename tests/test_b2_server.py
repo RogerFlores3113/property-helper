@@ -189,7 +189,8 @@ def test_move_place_aliases_and_buy_mode(store):
     assert "isn't a stage" in err(s, "move_place", place_id=pid, stage="Tour booked")
 
 
-def test_list_places_filters_sort_and_hides_deal_breaker_failures(srv):
+def test_list_places_filters_sort_and_hides_deal_breaker_failures(srv, store):
+    store.update_search(store.current_search()["id"], hide_dealbreakers=True)  # off by default now; this is the opt-in case
     add(srv, title="Good", address="1 G St", price=1400, utilities_estimate=80, laundry="in_unit", dishwasher=True, lat=40.108, lng=-88.227)
     add(srv, title="Pricey", address="2 G St", price=2000, utilities_estimate=80)
     add(srv, title="Mid", address="3 G St", price=1500, utilities_estimate=60)
@@ -319,6 +320,7 @@ def test_create_and_update_search_criteria_and_anchors(store, srv):
 
 
 def test_update_search_reports_places_hidden_by_a_new_deal_breaker(srv, store):
+    store.update_search(store.current_search()["id"], hide_dealbreakers=True)
     add(srv, title="A", address="1 A St", price=1500, utilities_estimate=50)
     add(srv, title="B", address="2 A St", price=1550, utilities_estimate=50, laundry="none")
     cid = store.list_criteria(store.current_search()["id"])[1]["id"]
@@ -360,6 +362,7 @@ def test_todays_list_and_overview(store):
     assert "create_search" in text(call(s, "todays_list"))
     assert "No search yet" in text(call(s, "get_overview"))
     load_sample_data(store)
+    store.update_search(store.current_search()["id"], hide_dealbreakers=True)
     out = text(call(s, "todays_list"))
     assert "Tours in the next 7 days:" in out and "Maple Row Flats" in out and "Waiting on a reply:" in out
     assert "New places the user has not looked at:" in out and "Application checklist: 8 items" in out

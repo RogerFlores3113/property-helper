@@ -31,29 +31,50 @@ def _next_date(place: dict[str, Any], tours: list[dict[str, Any]]) -> dict[str, 
 def enrich_place(store: Store, place: dict[str, Any], search: dict[str, Any], *, anchors: list[dict[str, Any]] | None = None,
                  commutes: list[dict[str, Any]] | None = None, criteria: list[dict[str, Any]] | None = None,
                  tours: list[dict[str, Any]] | None = None, peer_prices: list[float] | None = None,
-                 settings: dict[str, Any] | None = None) -> dict[str, Any]:
+                 settings: dict[str, Any] | None = None, protected: bool | None = None) -> dict[str, Any]:
     """One place with the extra keys: ``cost`` (money breakdown), ``cost_total``, ``score`` (scoring result),
     ``score_total``, ``band``, ``commutes`` (all resolved), ``top_commute``, ``next``, ``flags`` (things to check),
-    ``hidden_by_dealbreaker``."""
+    ``hidden_by_dealbreaker``, ``people`` and ``per_person`` (the cost split, when more than one person shares it).
+    A place is never hidden by a deal-breaker when it has a tour, a linked contact or a stage past Saved
+    (``protected``; looked up when left as None)."""
     anchors = store.list_anchors() if anchors is None else anchors
     commutes = store.list_commutes(place["id"]) if commutes is None else commutes
     criteria = store.list_criteria(search["id"]) if criteria is None else criteria
     tours = store.list_tours(place["id"]) if tours is None else tours
     settings = store.buy_settings() if settings is None else settings
-    cost = money.true_monthly_cost(place, search["mode"], settings)
+    people = int(search.get("people") or 1)
+    cost = money.true_monthly_cost(place, search["mode"], settings, people)
+    flags = redflags.local_flags(place, peer_prices or [])
+    serious = bool(flags) and scoring.has_serious_flag(place, peer_prices or [])
     score = scoring.score_place(place, criteria, mode=search["mode"], anchors=anchors, commutes=commutes,
                                 custom_scores=store.custom_scores(place["id"]), budget_max=search.get("budget_max"),
-                                settings=settings, cost=cost)
+                                settings=settings, cost=cost, serious_flag=serious, people=people)
+    if protected is None:
+        protected = place["id"] in store.protected_place_ids(search["id"])
     prefer = next((c["target"].get("mode") for c in criteria if c["kind"] == "commute"), None)
+    by_id = {a["id"]: a for a in anchors}
+    first_anchor = anchors[0]["id"] if anchors else None
+    commute_tops = []
+    for c in criteria:
+        if c["kind"] != "commute":
+            continue
+        anchor = by_id.get(c["target"].get("anchor_id") or first_anchor)
+        mode = c["target"].get("mode") or "bike"
+        found = commute_mod.resolve(place, anchor, mode, commutes) if anchor else None
+        if found and not any(t["anchor_id"] == anchor["id"] for t in commute_tops):
+            commute_tops.append({"anchor": anchor["name"], "anchor_id": anchor["id"], **found,
+                                 "short": f"{anchor['name']} {found['minutes']:.0f} min {found['mode']}"})
     out = dict(place)
     out.update({
         "cost": cost, "cost_total": cost["total"], "score": score, "score_total": score["total"],
         "band": scoring.score_band(score["total"]),
         "commutes": commute_mod.resolve_all(place, anchors, commutes),
         "top_commute": commute_mod.top_commute(place, anchors, commutes, prefer),
+        "commute_tops": commute_tops,
         "next": _next_date(place, tours),
-        "flags": redflags.local_flags(place, peer_prices or []),
-        "hidden_by_dealbreaker": bool(search.get("hide_dealbreakers") and score["fails_dealbreaker"]),
+        "flags": flags,
+        "hidden_by_dealbreaker": bool(search.get("hide_dealbreakers") and score["fails_dealbreaker"] and not protected),
+        "people": people, "per_person": cost.get("per_person"),
     })
     return out
 
@@ -69,6 +90,7 @@ def enrich_places(store: Store, search: dict[str, Any], places: list[dict[str, A
     for t in store.list_tours(search_id=search["id"]):
         tours_by.setdefault(t["place_id"], []).append(t)
     settings = store.buy_settings()
+    protected = store.protected_place_ids(search["id"])
     all_prices = [p["price"] for p in store.list_places(search["id"]) if p.get("price")]
     out = []
     for p in places:
@@ -76,5 +98,6 @@ def enrich_places(store: Store, search: dict[str, Any], places: list[dict[str, A
         if p.get("price") in peers:
             peers.remove(p["price"])
         out.append(enrich_place(store, p, search, anchors=anchors, commutes=commutes.get(p["id"], []), criteria=criteria,
-                                tours=tours_by.get(p["id"], []), peer_prices=peers, settings=settings))
+                                tours=tours_by.get(p["id"], []), peer_prices=peers, settings=settings,
+                                protected=p["id"] in protected))
     return out

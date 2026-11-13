@@ -80,6 +80,7 @@ def test_ai_key_is_never_shown(client):
 
 # ---- Board
 def test_board_has_a_column_per_stage_and_hides_dealbreakers(client, sample_store):
+    sample_store.update_search(sample_store.current_search()["id"], hide_dealbreakers=True)  # off by default now
     html = client.get("/board").text
     for stage in ("Saved", "Contacted", "Tour booked", "Toured", "Applied", "Approved", "Lease signed", "Passed"):
         assert f'data-stage="{stage}"' in html

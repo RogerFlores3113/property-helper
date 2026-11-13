@@ -84,7 +84,8 @@ def _settings_context(store: Store) -> dict[str, Any]:
             "geocode": store.get_setting_bool("geocode"), "show_photos": store.get_setting_bool("show_photos"),
             "strict": store.get_setting_bool("strict_scraping"), "strict_per_call": STRICT_ADDS_PER_CALL,
             "strict_per_hour": STRICT_ADDS_PER_HOUR, "down_payment_pct": store.get_setting("down_payment_pct"),
-            "mortgage_rate": store.get_setting("mortgage_rate"), "loan_years": store.get_setting("loan_years")}
+            "mortgage_rate": store.get_setting("mortgage_rate"), "loan_years": store.get_setting("loan_years"),
+            "pmi_rate_pct": store.get_setting("pmi_rate_pct")}
 
 
 def open_folder(path: Path) -> bool:
@@ -160,6 +161,8 @@ async def save_settings(request: Request):
             store.set_setting("down_payment_pct", _float_between(form["down_payment_pct"], 0, 100, "The down payment"))
         if "mortgage_rate" in form:
             store.set_setting("mortgage_rate", _float_between(form["mortgage_rate"], 0, 30, "The mortgage rate"))
+        if "pmi_rate_pct" in form:
+            store.set_setting("pmi_rate_pct", _float_between(form["pmi_rate_pct"], 0, 5, "The mortgage insurance rate"))
         if "loan_years" in form:
             store.set_setting("loan_years", _int_between(form["loan_years"], 1, 50, "The loan length"))
     except ValueError as exc:

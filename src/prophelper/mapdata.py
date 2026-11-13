@@ -45,7 +45,7 @@ def build(places: list[dict[str, Any]], anchors: list[dict[str, Any]], *, tiles:
             located.append(row)
         else:
             unlocated.append(p)
-    pins = [{"id": p["id"], "title": p["title"], "label": label_for(p), "score": p["score_total"], "band": p["band"] or "none",
+    pins = [{"id": p["id"], "title": p["title"], "label": label_for(p), "score": p["score_total"], "fit": (p.get("score") or {}).get("fit", "fits"), "band": p["band"] or "none",
              "stage": p["stage"], "lat": float(p["lat"]), "lng": float(p["lng"]), "url": f"/places/{p['id']}"} for p in located]
     pts = [{"id": a["id"], "name": a["name"], "lat": float(a["lat"]), "lng": float(a["lng"])} for a in anchors if commute.has_point(a)]
     marks = [(x["lat"], x["lng"]) for x in pins + pts]

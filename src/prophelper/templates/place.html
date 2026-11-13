@@ -1,5 +1,6 @@
 {% extends "base.html" %}
 {% from "_macros.html" import page_head, button, post_button, stage_form, stage_badge, score_pill, sample_badge %}
+{% from "_fit.html" import fit_badge, score_note %}
 {% block title %}{{ place.title }} &middot; Property Helper{% endblock %}
 {% block body %}
 <div class="page-head">
@@ -8,8 +9,9 @@
     <p class="sub">{{ place.address }}{% if place.unit %} #{{ place.unit }}{% endif %}{% if place.city %}, {{ place.city }}{% endif %}{% if place.state %} {{ place.state }}{% endif %}
       {% if place.url %} &middot; <a href="{{ place.url }}" rel="noopener noreferrer" target="_blank">{{ place.source or (place.url|host) }}</a>{% endif %}</p>
     <p>{{ stage_badge(place.stage) }}
-      {{ score_pill(place.score_total, place.band) }}
-      <strong>{% if place.cost_total is not none %}{{ place.cost_total|money }}/mo true cost{% else %}True cost unknown{% endif %}</strong>
+      {% if place.score.fit != 'doesnt_fit' %}{{ score_pill(place.score_total, place.band) }}{% endif %}
+      {{ fit_badge(place) }} {{ score_note(place) }}
+      <strong>{% if place.cost_total is not none %}{{ place.cost.headline_each }}, true cost{% else %}True cost unknown{% endif %}</strong>
       {% if place.archived_at %}<span class="badge">Archived</span>{% endif %}
       {% if place.hidden %}<span class="badge">Hidden from the board</span>{% endif %}</p>
   </div>
@@ -100,10 +102,13 @@
     <h2>What it really costs</h2>
     {% set c = place.cost %}
     {% if c.lines %}
+    {% if c.total is not none %}<p class="cost-headline"><strong>{{ c.headline }}</strong>{% if c.per_person is not none %}<br><strong>{{ c.per_person|money }} per person</strong> <span class="fine">({{ c.people }} people sharing)</span>{% endif %}</p>{% endif %}
+    {% if c.mode == 'buy' and c.down_payment is not none %}<p class="fine">Down payment {{ c.down_payment|money }} ({{ c.settings.down_payment_pct|round(1) }}%). Loan {{ c.loan_amount|money }}.{% if c.pmi is not none %} Mortgage insurance (PMI) is a rough estimate of {{ c.pmi|money }} a month, since you put down under 20%.{% endif %}</p>{% endif %}
     <table class="cost-table">
       {% for l in c.lines %}<tr><td>{{ l.label }}{% if l.note %}<div class="fine">{{ l.note }}</div>{% endif %}</td>
         <td class="amt">{% if l.amount is none %}<span class="missing">unknown</span>{% else %}{{ l.amount|money(cents=True) }}{% endif %}</td></tr>{% endfor %}
-      <tr class="total"><td>Per month, all in</td><td class="amt">{% if c.total is not none %}{{ c.total|money(cents=True) }}{% else %}&ndash;{% endif %}</td></tr>
+      <tr class="total"><td>Per month{% if c.uncounted %}, so far{% else %}, all in{% endif %}</td><td class="amt">{% if c.total is not none %}{{ c.total|money(cents=True) }}{% else %}&ndash;{% endif %}</td></tr>
+      {% if c.per_person is not none %}<tr class="total"><td>Per person ({{ c.people }} people)</td><td class="amt">{{ c.per_person|money(cents=True) }}</td></tr>{% endif %}
     </table>
     {% else %}<p>Add the price to see the true monthly cost.</p>{% endif %}
     {% if c.missing %}<p class="missing">Not counted yet because it is missing: {{ c.missing|join(', ') }}. Fill {{ 'it' if c.missing|length == 1 else 'them' }} in under Facts to make the number honest.</p>{% endif %}
@@ -112,7 +117,9 @@
   </section>
 
   <section class="card" id="score">
-    <h2>Fit score {{ score_pill(place.score_total, place.band) }}</h2>
+    <h2>Fit score {% if place.score.fit != 'doesnt_fit' %}{{ score_pill(place.score_total, place.band) }}{% endif %} {{ fit_badge(place) }}</h2>
+    {% if place.score.raw_total is not none and place.score.raw_total != place.score_total %}<p class="fine">The criteria alone give {{ place.score.raw_total }}, but the score is held at {{ place.score_total }} because of the note above.</p>{% endif %}
+    {{ score_note(place) }}
     {% if place.score['items'] %}
     <table class="score-table">
       <thead><tr><th>Criterion</th><th>Score</th><th>Weight</th></tr></thead>
@@ -130,8 +137,8 @@
         <td>{{ i.weight|round|int }}</td></tr>
       {% endfor %}
     </table>
-    {% if place.score.unknown %}<p class="missing">Not counted (unknown): {{ place.score.unknown|join(', ') }}.</p>{% endif %}
-    {% if place.score.failed %}<p class="flag">Fails a deal-breaker: {{ place.score.failed|join(', ') }}.</p>{% endif %}
+    {% if place.score.unknown %}<p class="missing">Counted as a maybe because it is unknown: {{ place.score.unknown|join(', ') }}.</p>{% endif %}
+    {% if place.score.failed %}<p class="flag">Fails a deal-breaker: {{ place.score.fit_reasons|join('; ') }}.</p>{% endif %}
     {% if place.score.check %}<p class="missing">A deal-breaker can't be checked yet: {{ place.score.check|join(', ') }}.</p>{% endif %}
     {% else %}<p>This search has no criteria yet. <a href="/search?id={{ search.id }}#criteria">Add what matters to you</a> and every place gets a score.</p>{% endif %}
   </section>

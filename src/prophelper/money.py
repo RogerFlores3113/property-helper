@@ -3,18 +3,22 @@
 Rent: price + utilities_estimate + parking_cost + pet_rent + other_monthly_fees
       + (application_fee + move_in_fees + broker_fee + pet_fee) / lease_months (12 when empty).
 The deposit is shown but not spread (it comes back).
-Buy:  monthly principal and interest + property_tax / 12 + insurance / 12 + hoa. An estimate, not advice.
+Buy:  monthly principal and interest + PMI (when the down payment is under 20%) + property_tax / 12 + insurance / 12 + hoa.
+      An estimate, not advice.
 
 Each function returns ``{"total", "lines", "missing", "notes", ...}``. ``total`` is None when the main price is
 missing. ``lines`` is ``[{"key", "label", "amount", "note"}]`` in display order, ``missing`` names the numbers that
-are not filled in (so the page can say "add the utilities estimate").
+are not filled in (so the page can say "add the utilities estimate"). ``uncounted`` names the costs left out of the
+total in short words ("insurance", "utilities") and ``headline`` is the one line to show next to the total, such as
+"$2,414/mo, insurance not counted yet". ``per_person`` is the total split over ``people`` (only when people > 1).
 """
 from __future__ import annotations
 
 from typing import Any
 
 DEFAULT_LEASE_MONTHS = 12
-DEFAULT_BUY = {"down_payment_pct": 20.0, "mortgage_rate": 6.5, "loan_years": 30}
+DEFAULT_BUY = {"down_payment_pct": 20.0, "mortgage_rate": 6.5, "loan_years": 30, "pmi_rate_pct": 0.5}
+PMI_BELOW_PCT = 20.0  # mortgage insurance is estimated when the down payment is under this share of the price
 PRIVATE_PARKING = ("garage", "covered", "lot")
 
 
@@ -46,6 +50,7 @@ def rent_cost(place: dict[str, Any]) -> dict[str, Any]:
     """The true monthly cost of renting this place, line by line."""
     price = num(place.get("price"))
     missing: list[str] = []
+    uncounted: list[str] = []
     notes: list[str] = []
     lines: list[dict[str, Any]] = []
     if price is None:
@@ -58,13 +63,20 @@ def rent_cost(place: dict[str, Any]) -> dict[str, Any]:
             lines.append(_line("utilities", "Utilities", 0, "included in the rent"))
         else:
             missing.append("utilities estimate")
-            lines.append(_line("utilities", "Utilities (your estimate)", None, "not filled in"))
+            uncounted.append("utilities")
+            lines.append(_line("utilities", "Utilities", None, "not filled in"))
     else:
-        lines.append(_line("utilities", "Utilities (your estimate)", util, str(place.get("utilities_included") or "")))
+        note = "A guess, not from the listing"
+        if place.get("utilities_included"):
+            note += f". The listing includes: {place['utilities_included']}"
+        line = _line("utilities", "Utilities (a guess)", util, note)
+        line["estimated"] = True
+        lines.append(line)
 
     parking = num(place.get("parking_cost"))
     if parking is None and str(place.get("parking") or "") in PRIVATE_PARKING:
         missing.append("parking cost")
+        uncounted.append("parking")
         lines.append(_line("parking", "Parking", None, "not filled in"))
     else:
         lines.append(_line("parking", "Parking", parking or 0))
@@ -93,7 +105,7 @@ def rent_cost(place: dict[str, Any]) -> dict[str, Any]:
     if deposit:
         notes.append(f"Deposit ${deposit:,.0f} is not included in the monthly cost because it comes back.")
     return {"mode": "rent", "total": total, "lines": lines, "missing": missing, "notes": notes, "deposit": deposit,
-            "lease_months": months, "one_time_total": _r(one_total)}
+            "lease_months": months, "one_time_total": _r(one_total), "uncounted": uncounted}
 
 
 def monthly_payment(principal: float, annual_rate_pct: float, years: float) -> float:
@@ -122,34 +134,82 @@ def buy_cost(place: dict[str, Any], settings: dict[str, Any] | None = None) -> d
     cfg = buy_settings(settings)
     price = num(place.get("price"))
     missing: list[str] = []
+    uncounted: list[str] = []
     lines: list[dict[str, Any]] = []
+    down = loan = pmi = None
+    notes = ["An estimate to compare places, not financial advice."]
     if price is None:
         missing.append("asking price")
         lines.append(_line("loan", "Loan payment (principal and interest)", None, "needs the asking price"))
         pi = None
     else:
         down = price * cfg["down_payment_pct"] / 100
-        pi = monthly_payment(price - down, cfg["mortgage_rate"], cfg["loan_years"])
+        loan = price - down
+        pi = monthly_payment(loan, cfg["mortgage_rate"], cfg["loan_years"])
         lines.append(_line("loan", "Loan payment (principal and interest)", pi,
-                           f"{cfg['down_payment_pct']:g}% down, {cfg['mortgage_rate']:g}% rate, {cfg['loan_years']:g} years"))
+                           f"Loan {_dollars(loan)} after {_dollars(down)} down ({cfg['down_payment_pct']:g}%), "
+                           f"{cfg['mortgage_rate']:g}% rate, {cfg['loan_years']:g} years"))
+        if cfg["down_payment_pct"] < PMI_BELOW_PCT:
+            pmi = loan * cfg["pmi_rate_pct"] / 100 / 12
+            lines.append(_line("pmi", "Mortgage insurance (PMI), an estimate", pmi,
+                               f"{cfg['pmi_rate_pct']:g}% of the loan a year, because the down payment is under {PMI_BELOW_PCT:g}%"))
+            notes.append("PMI is a rough guess. Your lender's quote decides the real number.")
     tax, ins, hoa = num(place.get("property_tax")), num(place.get("insurance")), num(place.get("hoa"))
     for key, label, val, per in (("tax", "Property tax", tax, 12), ("insurance", "Insurance", ins, 12)):
         if val is None:
             missing.append(label.lower() + " (per year)")
+            uncounted.append(label.lower())
             lines.append(_line(key, label, None, "not filled in"))
         else:
             lines.append(_line(key, label, val / per, f"${val:,.0f} a year"))
     if hoa is None:
         missing.append("HOA (per month)")
+        uncounted.append("HOA")
         lines.append(_line("hoa", "HOA", None, "not filled in"))
     else:
         lines.append(_line("hoa", "HOA", hoa))
     total = None if pi is None else _r(sum(l["amount"] or 0 for l in lines))
-    return {"mode": "buy", "total": total, "lines": lines, "missing": missing,
-            "notes": ["An estimate to compare places, not financial advice."], "deposit": None,
-            "down_payment": None if price is None else _r(price * cfg["down_payment_pct"] / 100), "settings": cfg}
+    return {"mode": "buy", "total": total, "lines": lines, "missing": missing, "uncounted": uncounted,
+            "notes": notes, "deposit": None,
+            "down_payment": None if down is None else _r(down), "loan_amount": None if loan is None else _r(loan),
+            "pmi": None if pmi is None else _r(pmi), "settings": cfg}
 
 
-def true_monthly_cost(place: dict[str, Any], mode: str = "rent", settings: dict[str, Any] | None = None) -> dict[str, Any]:
-    """Rent or buy breakdown depending on the search's mode."""
-    return buy_cost(place, settings) if mode == "buy" else rent_cost(place)
+def _dollars(n: float) -> str:
+    return f"${n:,.0f}"
+
+
+def _join_words(items: list[str]) -> str:
+    if len(items) <= 1:
+        return "".join(items)
+    return ", ".join(items[:-1]) + " and " + items[-1]
+
+
+def headline(cost: dict[str, Any], people: int = 1) -> str:
+    """The one line next to the total: '$2,414/mo, insurance not counted yet' (and '$807 each' when people share it)."""
+    total = cost.get("total")
+    if total is None:
+        return "Cost unknown"
+    text = f"{_dollars(total)}/mo"
+    unc = list(cost.get("uncounted") or [])
+    if unc:
+        text += f", {_join_words(unc)} not counted yet"
+    if people and people > 1:
+        text += f" ({_dollars(total / people)} each for {people} people)"
+    return text
+
+
+def true_monthly_cost(place: dict[str, Any], mode: str = "rent", settings: dict[str, Any] | None = None,
+                      people: Any = 1) -> dict[str, Any]:
+    """Rent or buy breakdown depending on the search's mode. ``people`` (people sharing the cost) adds
+    ``people`` and, when more than one, ``per_person``. ``headline`` is the line to show next to the total."""
+    out = buy_cost(place, settings) if mode == "buy" else rent_cost(place)
+    try:
+        n = max(1, int(people or 1))
+    except (TypeError, ValueError):
+        n = 1
+    out["people"] = n
+    out["per_person"] = _r(out["total"] / n) if out["total"] is not None and n > 1 else None
+    out["headline"] = headline(out, 1)
+    out["headline_each"] = headline(out, n)
+    return out
