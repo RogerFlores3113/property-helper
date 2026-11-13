@@ -5,7 +5,7 @@
 {% call page_head("Application checklist", "What a lender and seller usually ask for, so you are ready before you make an offer." if mode == "buy" else "What most landlords ask for, so you are ready before you apply.") %}
   <a class="btn small" href="#add">Add an item</a>
 {% endcall %}
-<p class="lead">Property Helper keeps this list, not copies of your documents. Keep the papers themselves wherever you keep them now.</p>
+<p class="lead">Property Helper keeps this list, not copies of your documents. Keep the papers themselves wherever you keep them now.{% if mode != 'buy' %} On each place you can tick what is done for that place, under "Applying here".{% endif %}</p>
 
 <section class="card" aria-labelledby="list-h">
   <h2 id="list-h">{{ done }} of {{ items|length }} ready</h2>

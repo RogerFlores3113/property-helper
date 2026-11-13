@@ -8,6 +8,7 @@ A fresh list starts with renter items, or buyer items when the very first search
     POST /checklist/items/{id}/done      tick it or untick it (value=1 or 0)
     POST /checklist/items/{id}/move      move it up or down (direction=up or down)
     POST /checklist/items/{id}/delete    remove it
+    POST /places/{place_id}/checklist/{item_id}   tick or untick an item for one place (value=1 or 0)
 
 The app keeps the list, not copies of the documents.
 """
@@ -98,3 +99,18 @@ def delete_item(request: Request, item_id: int):
     item = _item_or_404(store, item_id)
     store.delete_checklist_item(item_id)
     return redirect("/checklist", notice=f"Removed {item['label']}.")
+
+
+@router.post("/places/{place_id}/checklist/{item_id}", include_in_schema=False)
+async def set_place_done(request: Request, place_id: int, item_id: int):
+    store = get_store(request)
+    try:
+        store.get_place(place_id)
+    except NotFound:
+        raise HTTPException(404, "That place doesn't exist (it may have been deleted).") from None
+    item = _item_or_404(store, item_id)
+    form = await request.form()
+    on = str(form.get("value", "1")) == "1"
+    store.set_place_checklist(place_id, item_id, on)
+    return redirect(f"/places/{place_id}#apply-item-{item_id}",
+                    notice=f"{item['label']}: done for this place." if on else f"{item['label']}: not done for this place.")

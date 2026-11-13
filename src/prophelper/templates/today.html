@@ -75,8 +75,9 @@
   <ul class="items">
     {% for c in coming %}
     <li class="item"><div class="item-main"><span class="badge">{{ c.label }}</span> <a class="item-title" href="{{ c.href }}">{{ c.title }}</a>
-      <span class="item-sub">{{ c.date|day }}{% if c.time %}, {{ c.time }}{% endif %} ({{ c.date|until }}){% if c.note %} &middot; {{ c.note }}{% endif %}</span>
-      {% if c.prep %}<span class="item-sub">{{ c.prep }}</span>{% endif %}</div></li>
+      <span class="item-sub">{% if c.text %}{{ c.text }}{% if c.time %}, {{ c.time }}{% endif %}{% else %}{{ c.date|day }}{% if c.time %}, {{ c.time }}{% endif %} ({{ c.date|until }}){% endif %}{% if c.note %} &middot; {{ c.note }}{% endif %}</span>
+      {% if c.prep %}<span class="item-sub">{{ c.prep }}</span>{% endif %}
+      {% if c.warn %}<span class="item-sub">{{ c.warn }}</span>{% endif %}</div></li>
     {% endfor %}
   </ul>
   {% else %}<p class="fine">No tours or dates in the next {{ coming_days }} days.</p>{% endif %}

@@ -82,6 +82,40 @@ def target_date(search: dict[str, Any]) -> tuple[str, str] | None:
 TARGET_LABELS = {"target_close": "Your target close date", "move_in_target": "Your move-in date"}
 
 
+def apply_by_text(day: str) -> str:
+    """'Apply by Fri Nov 20, in 3 days' for an application deadline."""
+    return f"Apply by {helpers.day_text(day)}, {helpers.until(day)}"
+
+
+def items_left_text(left: int, total: int) -> str:
+    """How much of the application checklist is still to do for one place."""
+    if not total:
+        return ""
+    if not left:
+        return "Everything on your application checklist is ticked for this place."
+    return f"{left} application item{'s' if left != 1 else ''} still to do for this place."
+
+
+def close_tour_notes(tours: list[dict[str, Any]]) -> dict[int, str]:
+    """For tours that start within 60 minutes of the one before on the same day: {tour id: note}, such as
+    '10:00 AM and 10:15 AM are 15 minutes apart; check the drive'."""
+    stamped = []
+    for t in tours:
+        local = helpers.to_local(t["starts_at"])
+        if local:
+            stamped.append((local, t))
+    stamped.sort(key=lambda x: x[0])
+    notes: dict[int, str] = {}
+    for (a, ta), (b, tb) in zip(stamped, stamped[1:]):
+        gap = round((b - a).total_seconds() / 60)
+        if a.date() != b.date() or gap > 60:
+            continue
+        first, second = helpers.clock_text(ta["starts_at"]), helpers.clock_text(tb["starts_at"])
+        notes[tb["id"]] = (f"{first} and {second} start at the same time; check the drive" if gap <= 0
+                           else f"{first} and {second} are {gap} minutes apart; check the drive")
+    return notes
+
+
 def prep_line(tour: dict[str, Any]) -> str:
     """The tour checklist items not answered yet, as one short line ('Check water pressure, hot water and 9 more')."""
     left = [name for name, v in (tour.get("checklist") or {}).items() if not (v or {}).get("state")]
@@ -103,16 +137,24 @@ def coming_up(store: Store, search: dict[str, Any], rows: list[dict[str, Any]], 
     ``title``, ``href``, ``date`` (YYYY-MM-DD), ``time`` (text), ``note`` and ``prep``."""
     sid = search["id"]
     out: list[dict[str, Any]] = []
-    for t in store.upcoming_tours(days, search_id=sid):
+    tours = store.upcoming_tours(days, search_id=sid)
+    close = close_tour_notes(tours)
+    for t in tours:
         d = helpers.local_date(t["starts_at"])
         local = helpers.to_local(t["starts_at"])
         out.append({"when": (d, local.strftime("%H:%M") if local else ""), "kind": "tour", "label": "Tour", "title": t["title"],
                     "href": f"/places/{t['place_id']}#tours", "date": d, "time": helpers.clock_text(t["starts_at"]),
-                    "note": ("with " + t["with_whom"]) if t["with_whom"] else "", "prep": prep_line(t)})
+                    "note": ("with " + t["with_whom"]) if t["with_whom"] else "", "prep": prep_line(t),
+                    "warn": close.get(t["id"], "")})
+    total_items = len(store.list_checklist()) if search["mode"] != "buy" else 0
     for r in store.upcoming_place_dates(days, search_id=sid):
-        out.append({"when": (r["date"], r["time"] or "00:00"), "kind": "key_date", "label": PLACE_DATE_LABELS.get(r["kind"], "Date"),
-                    "title": r["title"], "href": f"/places/{r['place_id']}#dates", "date": r["date"],
-                    "time": _clock(r["time"]), "note": r["note"], "prep": ""})
+        row = {"when": (r["date"], r["time"] or "00:00"), "kind": "key_date", "label": PLACE_DATE_LABELS.get(r["kind"], "Date"),
+               "title": r["title"], "href": f"/places/{r['place_id']}#applying" if r["kind"] == "application_deadline" else f"/places/{r['place_id']}#dates",
+               "date": r["date"], "time": _clock(r["time"]), "note": r["note"], "prep": ""}
+        if r["kind"] == "application_deadline" and search["mode"] != "buy":
+            row["text"] = apply_by_text(r["date"])
+            row["prep"] = items_left_text(store.place_checklist_left(r["place_id"]), total_items)
+        out.append(row)
     for r in store.upcoming_dates(days, search_id=sid):
         out.append({"when": (r["date"], "00:00"), "kind": "place_date", "label": r["label"], "title": r["place"]["title"],
                     "href": f"/places/{r['place']['id']}", "date": r["date"], "time": "", "note": "", "prep": ""})
